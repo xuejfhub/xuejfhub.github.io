@@ -3,40 +3,139 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>我的个人博客</title>
+    <title>我的个人作品集 | xuejfhub</title>
     <style>
+        :root {
+            --primary-color: #0078d4;
+            --text-color: #333;
+            --bg-color: #f5f7fa;
+            --card-bg: #ffffff;
+        }
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 2rem;
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-color);
             line-height: 1.6;
-            color: #333;
         }
-        h1 {
-            color: #2c3e50;
-            border-bottom: 2px solid #eaeaea;
-            padding-bottom: 0.5rem;
+        header {
+            background-color: #2c3e50;
+            color: white;
+            padding: 3rem 1rem;
+            text-align: center;
+        }
+        header h1 {
+            margin: 0;
+            font-size: 2.5rem;
+        }
+        header p {
+            margin-top: 10px;
+            opacity: 0.9;
+            font-size: 1.1rem;
         }
         .container {
-            background-color: #f9f9f9;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 2rem 1rem;
+        }
+        .section-title {
+            text-align: center;
+            margin-bottom: 2rem;
+            color: #2c3e50;
+            font-size: 1.8rem;
+            position: relative;
+        }
+        .section-title::after {
+            content: '';
+            display: block;
+            width: 50px;
+            height: 3px;
+            background-color: var(--primary-color);
+            margin: 10px auto 0;
+        }
+        .projects-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+        }
+        .project-card {
+            background: var(--card-bg);
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            display: flex;
+            flex-direction: column;
+        }
+        .project-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 15px rgba(0,0,0,0.15);
+        }
+        .project-content {
+            padding: 1.5rem;
+            flex-grow: 1;
+        }
+        .project-title {
+            margin-top: 0;
+            font-size: 1.25rem;
+            color: #2c3e50;
+        }
+        .project-desc {
+            color: #666;
+            margin-bottom: 1.5rem;
+        }
+        .project-link {
+            display: inline-block;
+            background-color: var(--primary-color);
+            color: white;
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: 5px;
+            font-weight: 500;
+            transition: background-color 0.2s;
+        }
+        .project-link:hover {
+            background-color: #005a9e;
+        }
+        footer {
+            text-align: center;
             padding: 2rem;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-top: 3rem;
+            background-color: #fff;
+            color: #666;
+            border-top: 1px solid #eee;
         }
     </style>
 </head>
 <body>
+
+    <header>
+        <h1>Xuejfhub</h1>
+        <p>探索技术，分享生活</p>
+    </header>
+
     <div class="container">
-        <h1>欢迎来到我的 GitHub Pages 博客</h1>
-        <p>这是您的第一个网页！</p>
-        <p>当您看到这个页面时，说明您的 GitHub Pages 已经配置成功并且可以正常访问了。</p>
-        <hr>
-        <p>接下来，您可以：</p>
-        <ul>
-            <li>修改这个 index.html 文件来设计您的主页</li>
-            <li>或者使用 Hexo、Jekyll、Hugo 等静态博客生成器来搭建更专业的博客</li>
-        </ul>
+        <h2 class="section-title">我的作品</h2>
+        
+        <div class="projects-grid">
+            <!-- 示例项目 1 -->
+            <div class="project-card">
+                <div class="project-content">
+                    <h3 class="project-title">SHEPWM 空间矢量投影</h3>
+                    <p class="project-desc">
+                        这是一个交互式的三电平 SHEPWM 空间矢量投影演示。使用 Plotly.js 和 Math.js 构建，展示了不同开关状态下的矢量变化。
+                    </p>
+                    <a href="./tlspwm_graph.html" class="project-link">查看演示 &rarr;</a>
+                </div>
+            </div>
+            
+        </div>
     </div>
+
+    <footer>
+        <p>&copy; 2026 Xuejfhub. All rights reserved.</p>
+    </footer>
+
 </body>
 </html>

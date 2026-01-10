@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>三电平 SHEPWM 空间矢量投影演示</title>
+    <script src="https://cdn.bootcdn.net/ajax/libs/plotly.js/2.27.0/plotly.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.8.0/math.js"></script>
+    <style>
+        body { margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; background: #f0f2f5; display: flex; flex-direction: column; height: 100vh; }
+        #header { padding: 10px 20px; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.1); z-index: 10; display: flex; justify-content: space-between; align-items: center; }
+        #controls { display: flex; gap: 20px; align-items: center; }
+        #main { flex: 1; display: flex; overflow: hidden; }
+        #plot-container { flex: 1; position: relative; }
+        .info-panel { width: 300px; background: #fff; border-left: 1px solid #ddd; padding: 20px; overflow-y: auto; }
+        h1 { margin: 0; font-size: 1.2rem; color: #333; }
+        .state-card { background: #f8f9fa; border: 1px solid #eee; padding: 10px; margin-bottom: 10px; border-radius: 4px; }
+        .state-active { background: #e3f2fd; border-color: #2196f3; }
+        .vector-val { font-family: monospace; font-weight: bold; }
+        button { padding: 8px 16px; background: #0078d4; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0063b1; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        .slider-group { display: flex; align-items: center; gap: 10px; }
+        input[type=range] { width: 100px; }
+    </style>
+</head>
+<body>
+
+<div id="header">
+    <h1>三电平 SHEPWM 空间矢量投影 (27状态)</h1>
+    <div id="controls">
+        <button id="btn-play">播放演示</button>
+        <button id="btn-reset">复位</button>
+        <button id="btn-view">切换视图</button>
+    </div>
+</div>
+
+<div id="main">
+    <div id="plot-container"></div>
+    <div class="info-panel">
+        <h3>参数设置</h3>
+        <div class="state-card">
+            <div style="margin-bottom:10px;">
+                <label>频率: <span id="val-freq" style="font-weight:bold; color:#0078d4;">50</span> Hz</label>
+                <input type="range" id="freq" min="-50" max="50" value="50" style="width:100%">
+            </div>
+            <div style="margin-bottom:10px;">
+                <label>幅值: <span id="val-amp" style="font-weight:bold; color:#0078d4;">0.9</span></label>
+                <input type="range" id="amp" min="0" max="1" step="0.05" value="0.9" style="width:100%">
+            </div>
+            <div style="margin-bottom:5px;">
+                <label>载波比: <span id="val-ratio" style="font-weight:bold; color:#0078d4;">24</span></label>
+                <input type="range" id="ratio" min="6" max="24" step="1" value="24" style="width:100%">
+            </div>
+        </div>
+
+        <h3>当前状态</h3>
+        <div id="current-state" class="state-card">
+            <div>时间: <span id="time-val">0.00</span> ms</div>
+            <div>角度: <span id="angle-val">0.0</span>°</div>
+            <div style="margin-top:10px;">开关状态 (ABC):</div>
+            <div class="vector-val" id="switch-state" style="font-size: 1.2rem; color: #0078d4;">[0, 0, 0]</div>
+            <div style="margin-top:5px;">$\alpha\beta$ 坐标:</div>
+            <div class="vector-val" id="alpha-beta-val">[0.00, 0.00]</div>
+        </div>
+        
+        <h3>SHEPWM 波形</h3>
+        <div id="waveform-plot" style="height: 200px;"></div>
+
+        <div style="margin-top: 20px; font-size: 0.9rem; color: #666;">
+            <p><strong>说明：</strong></p>
+            <p>• <strong>蓝色立方体点</strong>：三相开关状态 $(S_a, S_b, S_c)$，取值 $\{-1, 0, 1\}$。</p>
+            <p>• <strong>灰色平面</strong>：$a+b+c=0$ 平面 (Clarke变换投影面)。</p>
+            <p>• <strong>红色点</strong>：当前激活的开关状态。</p>
+            <p>• <strong>绿色点/线</strong>：投影到 $\alpha\beta$ 平面上的电压矢量。</p>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- 1. 定义 27 个开关状态 ---
+    const states = [];
+    for (let a = -1; a <= 1; a++) {
+        for (let b = -1; b <= 1; b++) {
+            for (let c = -1; c <= 1; c++) {
+                states.push([a, b, c]);
+            }
+        }
+    }
+
+    // --- 2. Clarke 变换矩阵 (等幅值变换) ---
+    // alpha = 2/3 * (a - 0.5*b - 0.5*c)
+    // beta  = 2/3 * (sqrt(3)/2*b - sqrt(3)/2*c)
+    // zero  = 1/3 * (a + b + c)
+    function clarke(abc) {
+        const a = abc[0], b = abc[1], c = abc[2];
+        const alpha = (2/3) * (a - 0.5*b - 0.5*c);
+        const beta  = (2/3) * (Math.sqrt(3)/2 * b - Math.sqrt(3)/2 * c);
+        const zero  = (1/3) * (a + b + c);
+        return { alpha, beta, zero };
+    }
+
+    // 预计算所有点的投影坐标
+    const projectedPoints = states.map(s => {
+        const c = clarke(s);
+        return { 
+            abc: s, 
+            alpha: c.alpha, 
+            beta: c.beta,
+            zero: c.zero,
+            // 为了在3D图中画投影平面上的点，我们需要把 alpha/beta 逆变换回 3D 空间的一个平面
+            // 通常选择 zero=0 的平面，即 a+b+c=0
+            // 逆变换 (zero=0):
+            // a = alpha
+            // b = -0.5*alpha + sqrt(3)/2*beta
+            // c = -0.5*alpha - sqrt(3)/2*beta
+            // 注意：这里为了可视化投影效果，我们把投影点画在通过原点的平面上
+            proj3d: [
+                c.alpha, // 简化处理，直接用变换后的坐标系可视化不太直观，
+                         // 我们最好是在原始ABC坐标系中画一个平面，把点投影上去。
+                         // 投影点 P_proj = P - (P·n)*n，其中 n 是平面法向量 (1,1,1)/sqrt(3)
+            ]
+        };
+    });
+
+    // 重新计算在 ABC 空间中 a+b+c=0 平面上的投影点坐标
+    const normal = [1/Math.sqrt(3), 1/Math.sqrt(3), 1/Math.sqrt(3)]; // 法向量
+    projectedPoints.forEach(p => {
+        const dot = p.abc[0]*normal[0] + p.abc[1]*normal[1] + p.abc[2]*normal[2];
+        p.proj3d = [
+            p.abc[0] - dot * normal[0],
+            p.abc[1] - dot * normal[1],
+            p.abc[2] - dot * normal[2]
+        ];
+    });
+
+    // --- 3. 生成 SHEPWM 序列 (模拟) ---
+    let pwmSequence = [];
+    let stepsPerCycle = 240;
+
+    function generatePWMSequence() {
+        const freq = parseFloat(document.getElementById('freq').value) || 50;
+        const ma = parseFloat(document.getElementById('amp').value) || 0.9;
+        const N = parseInt(document.getElementById('ratio').value) || 24;
+        
+        // 保证足够的分辨率来显示高频脉冲
+        stepsPerCycle = Math.max(360, N * 20); 
+        pwmSequence = [];
+        
+        for (let i = 0; i < stepsPerCycle; i++) {
+            const theta = (2 * Math.PI * i) / stepsPerCycle;
+            const t_ms = (i / stepsPerCycle) * (1000 / freq); // ms
+
+            // 调制波 (三相正弦)
+            const va = ma * Math.sin(theta);
+            const vb = ma * Math.sin(theta - 2*Math.PI/3);
+            const vc = ma * Math.sin(theta + 2*Math.PI/3);
+
+            // 载波生成 (PD - 同相层叠)
+            // 三角波相位
+            const carrierPhase = (theta * N) % (2 * Math.PI);
+            // 标准三角波 -1 to 1
+            const tri = (carrierPhase < Math.PI) ? 
+                        (carrierPhase / Math.PI * 2 - 1) : 
+                        (3 - carrierPhase / Math.PI * 2);
+            
+            // PD 载波: 上层 (0~1), 下层 (-1~0)
+            // 归一化三角波 0 to 1
+            const tri_norm = (tri + 1) / 2; 
+            
+            // 构造两个载波
+            const c_up = tri_norm;       // 0 to 1
+            const c_down = tri_norm - 1; // -1 to 0
+            
+            function getLevel(v) {
+                if (v >= 0) {
+                    return (v > c_up) ? 1 : 0;
+                } else {
+                    return (v < c_down) ? -1 : 0;
+                }
+            }
+
+            const sa = getLevel(va);
+            const sb = getLevel(vb);
+            const sc = getLevel(vc);
+
+            const clarkeVal = clarke([sa, sb, sc]);
+            const refClarke = clarke([va, vb, vc]);
+
+            pwmSequence.push({
+                t: t_ms,
+                theta: theta,
+                state: [sa, sb, sc],
+                alpha: clarkeVal.alpha,
+                beta: clarkeVal.beta,
+                refAlpha: refClarke.alpha,
+                refBeta: refClarke.beta
+            });
+        }
+    }
+    
+    // Initial generation
+    generatePWMSequence();
+
+    // --- 4. Plotly 绘图初始化 ---
+    
+    // 静态数据：27个点
+    const x_nodes = states.map(s => s[0]);
+    const y_nodes = states.map(s => s[1]);
+    const z_nodes = states.map(s => s[2]);
+
+    // 静态数据：投影点
+    const x_proj = projectedPoints.map(p => p.proj3d[0]);
+    const y_proj = projectedPoints.map(p => p.proj3d[1]);
+    const z_proj = projectedPoints.map(p => p.proj3d[2]);
+
+    // 连线 (Grid)
+    const lines = [];
+    // 简单生成网格线
+    function addLine(p1, p2, color='rgba(100,100,100,0.2)') {
+        lines.push({
+            type: 'scatter3d', mode: 'lines',
+            x: [p1[0], p2[0]], y: [p1[1], p2[1]], z: [p1[2], p2[2]],
+            line: { color: color, width: 2 }, hoverinfo: 'none', showlegend: false
+        });
+    }
+    // ... 这里省略繁琐的网格生成代码，直接画点更清晰
+
+    // 投影平面 (a+b+c=0)
+    // 定义平面上的四个角点用于绘制 Mesh
+    const planeSize = 2.5;
+    // 两个基向量在平面上
+    // v1 = (1, -1, 0), v2 = (1, 1, -2)
+    // 归一化后扩展
+    
+    const planeTrace = {
+        type: 'mesh3d',
+        x: [2, -2, -2, 2], // 简化的平面示意，实际需要计算
+        y: [-1, 1, -1, 1], // 这只是示意，下面用更精确的计算
+        z: [-1, 1, 3, -3],
+        // 使用法向量定义平面更简单: x+y+z=0
+        // 生成平面上的点网格
+        x: [-2, 2, 2, -2],
+        y: [1, -1, -3, 1], // 凑数满足 x+y+z=0
+        z: [1, -1, 1, 1],  // 这里的坐标需要仔细推敲，为了简单，我们只画投影点构成的六边形
+        color: 'rgba(200, 200, 200, 0.2)',
+        hoverinfo: 'none'
+    };
+
+    // --- 新增：坐标轴与立方体网格 ---
+    // A相(黄), B相(绿), C相(红) - 仅显示正半轴
+    const axisTraceA = {
+        type: 'scatter3d', mode: 'lines',
+        x: [0, 2.0], y: [0, 0], z: [0, 0],
+        line: { color: '#FFD700', width: 5 },
+        name: 'A轴'
+    };
+    const axisTraceB = {
+        type: 'scatter3d', mode: 'lines',
+        x: [0, 0], y: [0, 2.0], z: [0, 0],
+        line: { color: '#008000', width: 5 },
+        name: 'B轴'
+    };
+    const axisTraceC = {
+        type: 'scatter3d', mode: 'lines',
+        x: [0, 0], y: [0, 0], z: [0, 2.0],
+        line: { color: '#FF0000', width: 5 },
+        name: 'C轴'
+    };
+
+    const axisLabels = {
+        type: 'scatter3d',
+        mode: 'text',
+        x: [2.1, 0, 0],
+        y: [0, 2.1, 0],
+        z: [0, 0, 2.1],
+        text: ['A', 'B', 'C'],
+        textfont: { size: 18, color: ['#FFD700', '#008000', '#FF0000'] },
+        showlegend: false,
+        hoverinfo: 'none'
+    };
+
+    const gridX = [], gridY = [], gridZ = [];
+    [-1, 0, 1].forEach(v1 => {
+        [-1, 0, 1].forEach(v2 => {
+            gridX.push(-1, 1, null); gridY.push(v1, v1, null); gridZ.push(v2, v2, null);
+            gridX.push(v1, v1, null); gridY.push(-1, 1, null); gridZ.push(v2, v2, null);
+            gridX.push(v1, v1, null); gridY.push(v2, v2, null); gridZ.push(-1, 1, null);
+        });
+    });
+    
+    const cubeGridTrace = {
+        type: 'scatter3d', mode: 'lines',
+        x: gridX, y: gridY, z: gridZ,
+        line: { color: '#888', width: 2 }, // 立方体连线
+        opacity: 0.3,
+        name: '立方体连线',
+        hoverinfo: 'none'
+    };
+
+    // 计算投影网格 (将立方体网格投影到 a+b+c=0 平面)
+    const projGridX = [], projGridY = [], projGridZ = [];
+    for(let i=0; i<gridX.length; i++) {
+        if (gridX[i] === null) {
+            projGridX.push(null); projGridY.push(null); projGridZ.push(null);
+            continue;
+        }
+        const x = gridX[i], y = gridY[i], z = gridZ[i];
+        const dot = (x + y + z) / 3; // 投影公式
+        projGridX.push(x - dot);
+        projGridY.push(y - dot);
+        projGridZ.push(z - dot);
+    }
+
+    const projGridTrace = {
+        type: 'scatter3d', mode: 'lines',
+        x: projGridX, y: projGridY, z: projGridZ,
+        line: { color: '#87CEFA', width: 2 }, // 平面投影线，浅蓝色
+        opacity: 0.8,
+        name: '平面投影网格',
+        hoverinfo: 'none'
+    };
+
+    // 初始数据 Trace
+    const data = [
+        axisTraceA, axisTraceB, axisTraceC,
+        cubeGridTrace,
+        // 1. 27个状态点 (立方体)
+        {
+            type: 'scatter3d', mode: 'markers',
+            x: x_nodes, y: y_nodes, z: z_nodes,
+            marker: { size: 4, color: '#1f77b4', opacity: 0.5 },
+            name: '开关状态 (ABC)',
+            hovertemplate: 'State: [%{x}, %{y}, %{z}]<extra></extra>'
+        },
+        // 2. 投影网格 (替代原来的静态投影点)
+        projGridTrace,
+        // 4. 当前激活状态 (高亮蓝点)
+        {
+            type: 'scatter3d', mode: 'markers',
+            x: [0], y: [0], z: [0],
+            marker: { size: 10, color: '#0000FF', symbol: 'diamond' },
+            name: '当前状态'
+        },
+        // 5. 当前投影矢量 (蓝线)
+        {
+            type: 'scatter3d', mode: 'markers+lines',
+            x: [0, 0], y: [0, 0], z: [0, 0], // 原点到投影点
+            marker: { size: 8, color: '#0000FF' },
+            line: { color: '#0000FF', width: 5 },
+            name: '电压矢量'
+        },
+        // 6. 投影连线 (实线，连接真实点和投影点)
+        {
+            type: 'scatter3d', mode: 'lines',
+            x: [0, 0], y: [0, 0], z: [0, 0],
+            line: { color: '#0000FF', width: 4 },
+            showlegend: false
+        },
+        // 7. 坐标轴标签
+        axisLabels,
+        // 8. Alpha 轴 (Trace 10)
+        {
+            type: 'scatter3d', mode: 'lines+text',
+            x: [-2, 2], y: [1, -1], z: [1, -1],
+            line: { color: '#888', width: 2, dash: 'dot' },
+            name: 'α轴', text: ['', 'α'], textposition: 'top right',
+            textfont: { size: 14, color: '#666' }
+        },
+        // 9. Beta 轴 (Trace 11)
+        {
+            type: 'scatter3d', mode: 'lines+text',
+            x: [0, 0], y: [-Math.sqrt(3), Math.sqrt(3)], z: [Math.sqrt(3), -Math.sqrt(3)],
+            line: { color: '#888', width: 2, dash: 'dot' },
+            name: 'β轴', text: ['', 'β'], textposition: 'top right',
+            textfont: { size: 14, color: '#666' }
+        },
+        // 10. 调制波矢量 (Trace 12)
+        {
+            type: 'scatter3d', mode: 'markers+lines',
+            x: [0, 0], y: [0, 0], z: [0, 0],
+            marker: { size: 5, color: '#FFA500', symbol: 'circle' },
+            line: { color: '#FFA500', width: 3 },
+            name: '调制波矢量'
+        }
+    ];
+
+    const layout = {
+        scene: {
+            xaxis: { title: '', range: [-2.2, 2.2], visible: false },
+            yaxis: { title: '', range: [-2.2, 2.2], visible: false },
+            zaxis: { title: '', range: [-2.2, 2.2], visible: false },
+            camera: {
+                eye: { x: 1.5, y: 1.5, z: 1.5 },
+                projection: { type: 'orthographic' }
+            },
+            aspectmode: 'cube'
+        },
+        margin: { t: 0, b: 0, l: 0, r: 0 },
+        showlegend: true,
+        legend: { x: 0, y: 1 }
+    };
+
+    Plotly.newPlot('plot-container', data, layout);
+
+    // --- 5. 波形图初始化 ---
+    const waveLayout = {
+        margin: { t: 20, b: 30, l: 40, r: 20 },
+        xaxis: { title: 'Time' },
+        yaxis: { title: 'Level', range: [-1.5, 1.5], tickvals: [-1, 0, 1] },
+        showlegend: true,
+        legend: { orientation: 'h', y: 1.1 }
+    };
+    
+    Plotly.newPlot('waveform-plot', [
+        { y: [], name: 'Sa', line: { shape: 'hv' } },
+        { y: [], name: 'Sb', line: { shape: 'hv' } },
+        { y: [], name: 'Sc', line: { shape: 'hv' } }
+    ], waveLayout);
+
+    // --- 6. 动画逻辑 ---
+    let isPlaying = false;
+    let currentIndex = 0;
+    let animationId = null;
+
+    function updateFrame() {
+        let idx = Math.floor(currentIndex);
+        // Safety check
+        if (idx < 0) idx = 0;
+        if (idx >= stepsPerCycle) idx = stepsPerCycle - 1;
+        
+        const current = pwmSequence[idx];
+        const s = current.state;
+        
+        // 计算投影点
+        const dot = s[0]*normal[0] + s[1]*normal[1] + s[2]*normal[2];
+        const p_proj = [
+            s[0] - dot * normal[0],
+            s[1] - dot * normal[1],
+            s[2] - dot * normal[2]
+        ];
+
+        // 计算调制波矢量投影点 (Inverse Clarke)
+        const ra = current.refAlpha;
+        const rb = current.refBeta;
+        const s3 = Math.sqrt(3);
+        const ref_proj = [
+            ra,
+            -0.5 * ra + (s3/2) * rb,
+            -0.5 * ra - (s3/2) * rb
+        ];
+
+        // 更新 3D 图
+        Plotly.animate('plot-container', {
+            data: [
+                { x: [s[0]], y: [s[1]], z: [s[2]] }, // Trace 6: 当前状态
+                { x: [0, p_proj[0]], y: [0, p_proj[1]], z: [0, p_proj[2]] }, // Trace 7: 矢量线
+                { x: [s[0], p_proj[0]], y: [s[1], p_proj[1]], z: [s[2], p_proj[2]] }, // Trace 8: 投影连线
+                { x: [0, ref_proj[0]], y: [0, ref_proj[1]], z: [0, ref_proj[2]] } // Trace 12: 调制波矢量
+            ],
+            traces: [6, 7, 8, 12],
+            layout: {}
+        }, {
+            transition: { duration: 0 },
+            frame: { duration: 0, redraw: true }
+        });
+
+        // 更新面板信息
+        document.getElementById('time-val').innerText = (current.t * 0.1).toFixed(2);
+        document.getElementById('angle-val').innerText = (current.theta * 180 / Math.PI).toFixed(1);
+        document.getElementById('switch-state').innerText = `[${s[0]}, ${s[1]}, ${s[2]}]`;
+        document.getElementById('alpha-beta-val').innerText = `[${current.alpha.toFixed(2)}, ${current.beta.toFixed(2)}]`;
+
+        // 更新波形图 (滚动显示)
+        const historyLen = 100;
+        
+        Plotly.extendTraces('waveform-plot', {
+            y: [[s[0]], [s[1]], [s[2]]]
+        }, [0, 1, 2], historyLen); // Keep last 100 points
+
+        if (isPlaying) {
+            // 使用频率控制转速和方向
+            // 频率 50Hz 对应步长约为 2 (可视速度)
+            const freq = parseFloat(document.getElementById('freq').value);
+            const speedStep = freq * 0.05; 
+            
+            currentIndex += speedStep;
+            
+            // Wrap around
+            if (currentIndex >= stepsPerCycle) currentIndex %= stepsPerCycle;
+            while (currentIndex < 0) currentIndex += stepsPerCycle;
+
+            animationId = setTimeout(updateFrame, 30);
+        }
+    }
+
+    // 按钮事件
+    document.getElementById('btn-play').onclick = function() {
+        if (isPlaying) {
+            isPlaying = false;
+            this.innerText = '播放演示';
+            clearTimeout(animationId);
+        } else {
+            isPlaying = true;
+            this.innerText = '暂停';
+            updateFrame();
+        }
+    };
+
+    document.getElementById('btn-reset').onclick = function() {
+        isPlaying = false;
+        document.getElementById('btn-play').innerText = '播放演示';
+        clearTimeout(animationId);
+        currentIndex = 0;
+        // Reset waveform
+        Plotly.newPlot('waveform-plot', [
+            { y: [], name: 'Sa', line: { shape: 'hv' } },
+            { y: [], name: 'Sb', line: { shape: 'hv' } },
+            { y: [], name: 'Sc', line: { shape: 'hv' } }
+        ], waveLayout);
+        updateFrame();
+    };
+
+    document.getElementById('btn-view').onclick = function() {
+        const gd = document.getElementById('plot-container');
+        const currentType = gd.layout.scene.camera.projection.type;
+        const newType = currentType === 'orthographic' ? 'perspective' : 'orthographic';
+        Plotly.relayout(gd, {
+            'scene.camera.projection.type': newType
+        });
+    };
+
+    // 参数变更事件
+    ['freq', 'amp', 'ratio'].forEach(id => {
+        const el = document.getElementById(id);
+        const valDisplay = document.getElementById('val-' + id);
+        
+        // 实时更新数值显示
+        el.addEventListener('input', function() {
+            valDisplay.innerText = this.value;
+        });
+
+        // 变更后重新生成序列
+        el.addEventListener('change', function() {
+            generatePWMSequence();
+            currentIndex = 0;
+            // 重置波形图
+            Plotly.newPlot('waveform-plot', [
+                { y: [], name: 'Sa', line: { shape: 'hv' } },
+                { y: [], name: 'Sb', line: { shape: 'hv' } },
+                { y: [], name: 'Sc', line: { shape: 'hv' } }
+            ], waveLayout);
+            if (!isPlaying) updateFrame();
+        });
+    });
+
+    // 初始绘制一帧
+    updateFrame();
+
+</script>
+</body>
+</html>

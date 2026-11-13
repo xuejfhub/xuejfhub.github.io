@@ -5,8 +5,9 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { spawn } = require('node:child_process');
 const { createServer } = require('../脚本/开发/预览服务.js');
-const defaultTorques = [0, .2, .4, .6, .8, 1, 1.2, 1.4, 1.6, 1.8, 2, 2.2, 2.4, 2.6, 2.8, 3];
+const defaultTorques = [-3, -2.8, -2.6, -2.4, -2.2, -2, -1.8, -1.6, -1.4, -1.2, -1, -.8, -.6, -.4, -.2, 0, .2, .4, .6, .8, 1, 1.2, 1.4, 1.6, 1.8, 2, 2.2, 2.4, 2.6, 2.8, 3];
 const defaultTorqueText = defaultTorques.join(',');
+const defaultVoltages = [0, .2, .4, .6, .8, 1, 1.2, 1.4, 1.6, 1.8, 2];
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function until(check, message) {
   const start = Date.now();
@@ -61,6 +62,8 @@ test('真实浏览器：三分类首页、同步电机、PI控制器与PWM功能
     const read = id => page.evaluate(`({...document.getElementById(${JSON.stringify(id)}).dataset})`);
     const click = id => page.evaluate(`document.getElementById(${JSON.stringify(id)}).click()`);
     const change = (id, value, event = 'change') => page.evaluate(`(()=>{const el=document.getElementById(${JSON.stringify(id)});el.value=${JSON.stringify(value)};el.dispatchEvent(new Event(${JSON.stringify(event)},{bubbles:true}));})()`);
+    const voltageSnapshot = () => page.evaluate(`(()=>{const plot=document.getElementById('dq-plot'),model=JSON.parse(plot.dataset.model);return plot.data.filter(trace=>['voltage','voltage-level'].includes(trace.meta.kind)).map(trace=>{const points=trace.x.flatMap((direct,index)=>direct===null?[]:[{direct,quadrature:trace.y[index]}]);const expected=window.VoltageMotor?VoltageMotor.voltageTrajectory(model,trace.meta.voltage):null;const error=Math.max(0,...points.map((point,index)=>expected?Math.hypot(point.direct-expected[index].direct,point.quadrature-expected[index].quadrature):Math.abs(SynchronousMotor.evaluate(model,point.direct,point.quadrature).voltage-trace.meta.voltage)));const full=plot._fullData.find(item=>item.meta.kind===trace.meta.kind&&item.meta.voltage===trace.meta.voltage);return{voltage:trace.meta.voltage,kind:trace.meta.kind,count:points.length,error,drawn:!!full&&[...plot.querySelectorAll('.trace'+full.uid+' .js-line')].some(path=>path.getTotalLength()>2)}})})()`);
+    const trendStyles = () => page.evaluate(`(()=>{const data=document.getElementById('dq-plot').data;return data.filter(trace=>trace.meta.kind==='voltage-level'||(trace.meta.kind==='torque'&&trace.name.startsWith('T = -'))).map(trace=>({kind:trace.meta.kind,width:trace.line.width,opacity:trace.opacity,count:trace.x.filter(Number.isFinite).length}))})()`);
     async function navigate(route) {
       await page.call('Page.navigate', { url: origin + '/' + encodeURI(route) });
       await until(() => page.evaluate(`document.readyState==='complete' && decodeURI(location.pathname)===${JSON.stringify('/' + route.split('?')[0])}`), '页面加载失败：' + route);
@@ -155,6 +158,15 @@ test('真实浏览器：三分类首页、同步电机、PI控制器与PWM功能
       assert.equal(traces.find(trace => trace.kind === 'probe').points, 0);
       assert.deepEqual(traces.filter(trace => trace.kind === 'torque').map(trace => trace.name), defaultTorques.map(level => `T = ${level} pu`));
       assert.equal(await page.evaluate('document.getElementById("torque-values").value'), defaultTorqueText);
+      assert.equal(await page.evaluate('document.getElementById("voltage-values").value'), defaultVoltages.join(','));
+      const voltageInitial = await voltageSnapshot();
+      assert.deepEqual(voltageInitial.map(item => item.voltage).sort((first, second) => first - second), defaultVoltages);
+      assert.ok(voltageInitial.every(item => item.error < 1e-8));
+      assert.ok(voltageInitial.some(item => item.kind === 'voltage-level' && item.drawn));
+      const trends = await trendStyles();
+      assert.ok(trends.every(item => item.width === .85 && item.opacity === (item.kind === 'torque' ? .3 : .35)));
+      assert.equal(trends.filter(item => item.kind === 'torque').length, 15);
+      assert.ok(trends.some(item => item.kind === 'torque' && item.count > 2));
       assert.equal(await page.evaluate('document.getElementById("torque-step")'), null);
       assert.deepEqual(await page.evaluate('[...document.getElementById("torque-preset").options].map(option=>option.value).filter(Boolean)'), [defaultTorqueText, '-1,-0.5,0.5,1', '-1', '-0.5', '0.5', '1']);
       assert.equal(await page.evaluate('document.getElementById("dq-plot").layout.hovermode'), false);
@@ -187,6 +199,19 @@ test('真实浏览器：三分类首页、同步电机、PI控制器与PWM功能
       assert.equal(await page.evaluate('document.getElementById("torque-values").value'), defaultTorqueText);
       assert.deepEqual(await page.evaluate('document.getElementById("dq-plot").data.filter(trace=>trace.meta.kind==="torque").map(trace=>trace.name)'), defaultTorques.map(level => `T = ${level} pu`));
       await motorAction(`(async()=>{await Plotly.relayout(document.getElementById('dq-plot'),{'xaxis.range':[-16,8],'yaxis.range':[-8,8]});return true})()`);
+      await motorChange('voltage-values', '0,.35,2.4');
+      const customVoltage = await voltageSnapshot();
+      assert.deepEqual(customVoltage.map(item => item.voltage), [0, .35, 2.4, 1]);
+      assert.ok(customVoltage.every(item => item.count > 0 && item.error < 1e-8));
+      await motorAction('document.getElementById("show-voltage").click()');
+      assert.deepEqual(await voltageSnapshot(), []);
+      await motorAction('document.getElementById("show-voltage").click()');
+      const voltageRenderCount = (await read('dq-plot')).renderCount;
+      await change('voltage-values', '-1', 'input');
+      await until(async () => (await read('dq-plot')).stale === 'true', '负电压幅值没有提示');
+      assert.equal((await read('dq-plot')).renderCount, voltageRenderCount);
+      await motorAction('document.getElementById("reset").click()');
+      assert.equal(await page.evaluate('document.getElementById("voltage-values").value'), defaultVoltages.join(','));
       assert.ok(await page.evaluate('document.getElementById("dq-plot").data.find(trace=>trace.meta.kind==="mtpv").x.some(Number.isFinite)'), '缩小视图后可以看到较小电感对应的MTPV');
       const boundaryChecks = [];
       for (const [key, preset, kind] of [['currentLimit', 'current-preset', 'current'], ['voltageLimit', 'voltage-preset', 'voltage']]) {
@@ -470,10 +495,37 @@ test('真实浏览器：三分类首页、同步电机、PI控制器与PWM功能
       await until(() => page.evaluate('Number(document.getElementById("dq-plot").dataset.renderCount)>0'), 'VF未绘图');
       assert.equal(await page.evaluate('document.getElementById("torque-values").value'), defaultTorqueText);
       assert.deepEqual(await page.evaluate('document.getElementById("dq-plot").data.filter(trace=>trace.meta.kind==="torque").map(trace=>trace.name)'), defaultTorques.map(level => `T = ${level} pu`));
-      const action = async expression => { const before = Number((await read('dq-plot')).renderCount); await page.evaluate(expression); await until(async () => Number((await read('dq-plot')).renderCount) > before, 'VF未重绘'); };
+      const action = async expression => {
+        const before = Number((await read('dq-plot')).renderCount);
+        await page.evaluate(expression);
+        let previousCount = -1;
+        await until(async () => {
+          const state = await read('dq-plot'), count = Number(state.renderCount);
+          const settled = count > before && count === previousCount && state.previewActive !== 'true';
+          previousCount = count; return settled;
+        }, 'VF未完成重绘');
+      };
       const setValue = (id, value, event = 'input') => action(`(()=>{const field=document.getElementById('${id}');field.value=${JSON.stringify(String(value))};field.dispatchEvent(new Event('${event}',{bubbles:true}));})()`);
       const initial = JSON.parse((await read('probe-readout')).point);
+      assert.equal(await page.evaluate('document.getElementById("voltage-values").value'), defaultVoltages.join(','));
+      const voltageInitial = await voltageSnapshot();
+      assert.deepEqual(voltageInitial.map(item => item.voltage).sort((first, second) => first - second), defaultVoltages.filter(voltage => voltage > 0));
+      assert.ok(voltageInitial.every(item => item.count > 0 && item.error < 1e-8));
+      assert.ok(voltageInitial.some(item => item.kind === 'voltage-level' && item.drawn));
+      await setValue('voltage-values', '0,.35,2.4');
+      await setValue('voltageLimit', 3); await setValue('vfRatio', 2.3);
+      const customVoltage = await voltageSnapshot();
+      assert.deepEqual(customVoltage.map(item => item.voltage), [.35, 2.4, 2.3]);
+      assert.ok(customVoltage.every(item => item.count > 0 && item.error < 1e-8));
+      await action('document.getElementById("show-voltage").click()');
+      assert.deepEqual(await voltageSnapshot(), []);
+      await action('document.getElementById("show-voltage").click();document.getElementById("reset").click()');
+      assert.equal(await page.evaluate('document.getElementById("voltage-values").value'), defaultVoltages.join(','));
       assert.ok(Math.abs(initial.vd - .8) < 1e-10 && Math.abs(initial.vq) < 1e-10);
+      const trends = await trendStyles();
+      assert.ok(trends.every(item => item.width === .85 && item.opacity === (item.kind === 'torque' ? .3 : .35)));
+      assert.equal(trends.filter(item => item.kind === 'torque').length, 15);
+      assert.ok(trends.some(item => item.kind === 'torque' && item.count > 2));
       assert.ok(Math.abs(initial.quadrature) > .01); assert.ok(initial.feasible);
       const referenceSnapshot = () => page.evaluate(`(()=>{const plot=document.getElementById('dq-plot'),view=JSON.parse(plot.dataset.view);return Object.fromEntries(['mtpa','mtpv'].map(kind=>{const trace=plot.data.find(item=>item.meta.kind===kind),full=plot._fullData.find(item=>item.meta.kind===kind),paths=[...plot.querySelectorAll('.trace'+full.uid+' .js-line')];return[kind,{checked:document.getElementById('show-'+kind).checked,toolbar:!!document.querySelector('.curve-switches #show-'+kind),inside:trace.x.filter((direct,index)=>direct!==null&&direct>=view.x[0]&&direct<=view.x[1]&&trace.y[index]>=view.y[0]&&trace.y[index]<=view.y[1]).length,drawn:paths.some(path=>path.getTotalLength()>2),signature:JSON.stringify([trace.x,trace.y])}]}))})()`);
       const initialReferences = await referenceSnapshot();
@@ -577,7 +629,7 @@ test('真实浏览器：三分类首页、同步电机、PI控制器与PWM功能
         await until(() => page.evaluate('location.protocol==="file:" && Number(document.getElementById("dq-plot")?.dataset.renderCount)>0'), 'VF离线绘图失败');
         assert.ok(Math.abs(JSON.parse((await read('probe-readout')).point).torque - initial.torque) < 1e-12);
       } finally { await page.call('Network.setBlockedURLs', { urls: [] }); await page.call('Network.setCacheDisabled', { cacheDisabled: false }); }
-      await fs.writeFile(path.join(evidence, 'VF验收.json'), JSON.stringify({ initial, initialReferences: Object.fromEntries(Object.entries(initialReferences).map(([kind, { signature, ...values }]) => [kind, values])), speedChecks, pixels, contextLost, sliderPreview, speedPreview, offline: true, layouts, errors: page.errors }, null, 2));
+      await fs.writeFile(path.join(evidence, 'VF验收.json'), JSON.stringify({ initial, voltageInitial, customVoltage, initialReferences: Object.fromEntries(Object.entries(initialReferences).map(([kind, { signature, ...values }]) => [kind, values])), speedChecks, pixels, contextLost, sliderPreview, speedPreview, offline: true, layouts, errors: page.errors }, null, 2));
     });
 
     await navigate('页面/控制原理/PI控制器/控制器可视化.html');

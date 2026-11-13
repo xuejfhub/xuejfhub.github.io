@@ -4,6 +4,34 @@ const Motor = require('../页面/电机控制/同步电机/电机模型.js');
 const Preview = require('../页面/电机控制/同步电机/拖动预览.js');
 const near = (actual, expected, tolerance = 1e-10) => assert.ok(Math.abs(actual - expected) <= tolerance * Math.max(1, Math.abs(expected)), `${actual} != ${expected}`);
 
+test('参考电压默认0至2间隔0.2，允许非负自定义值并拒绝无效幅值', () => {
+  assert.deepEqual(Motor.DEFAULT_VOLTAGES, [0, .2, .4, .6, .8, 1, 1.2, 1.4, 1.6, 1.8, 2]);
+  assert.deepEqual(Motor.parseVoltageLevels('2,0,.4,.2,.4'), [0, .2, .4, 2]);
+  assert.deepEqual(Motor.parseVoltageLevels('10'), [10]);
+  for (const text of ['', '-.2', '±.2', 'NaN', '1e309', Array.from({ length: 33 }, (_, index) => index).join(',')]) assert.throws(() => Motor.parseVoltageLevels(text), /voltage-values/);
+});
+
+test('不同参考电压的转子轨迹逐点满足电压幅值，覆盖正反转及退化', () => {
+  for (const input of [{ speedPU: -2 }, { speedPU: .5 }, { speedPU: 0 }, { resistance: 0, lq: 0 }, { resistance: 0, ld: 0 }]) {
+    const model = Motor.createModel(input);
+    for (const voltage of Motor.DEFAULT_VOLTAGES) for (const point of Motor.voltageCurves(model, voltage, 12, 120).flat().filter(Boolean)) {
+      near(Motor.evaluate(model, point.direct, point.quadrature).voltage, voltage);
+    }
+  }
+});
+
+test('拖动预览同步参考电压族，当前边界不重复且可独立超出参考范围', () => {
+  const model = Motor.createModel({ voltageLimit: 2.3 });
+  const scene = { model, visible: { voltage: true }, levels: [], voltageLevels: [0, .4, 2] };
+  const geometry = Preview.geometryFor(scene, { x: [-12, 12], y: [-12, 12] });
+  assert.equal(geometry.lines.length, 4);
+  for (const [index, line] of geometry.lines.entries()) for (const point of line.branches.flat().filter(Boolean)) near(Motor.evaluate(model, point.direct, point.quadrature).voltage, [0, .4, 2, 2.3][index]);
+  assert.equal(geometry.lines[0].dots, true);
+  assert.equal(geometry.lines.at(-1).kind, 'voltage');
+  scene.model = Motor.createModel({ voltageLimit: .4 });
+  assert.equal(Preview.geometryFor(scene, geometry.bounds).lines.length, 3);
+});
+
 test('拖动预览色标保持原始端点、零点与饱和方向', () => {
   assert.deepEqual(Preview.colorFor(-2, 2), [57, 121, 172]);
   assert.deepEqual(Preview.colorFor(0, 2), [245, 247, 239]);
@@ -27,8 +55,8 @@ test('拖动预览扩大域覆盖新区域，隐藏图层不生成几何', () =>
   assert.deepEqual(geometry.lines[0].dash, [7, 6]); assert.deepEqual(geometry.lines[1].dash, []);
 });
 
-test('恒转矩默认0至3、间隔0.2，保留自定义单值、多值、正负成对和去重', () => {
-  const expected = [0, .2, .4, .6, .8, 1, 1.2, 1.4, 1.6, 1.8, 2, 2.2, 2.4, 2.6, 2.8, 3];
+test('恒转矩默认负3至3、间隔0.2，保留自定义单值、多值、正负成对和去重', () => {
+  const expected = [-3, -2.8, -2.6, -2.4, -2.2, -2, -1.8, -1.6, -1.4, -1.2, -1, -.8, -.6, -.4, -.2, 0, .2, .4, .6, .8, 1, 1.2, 1.4, 1.6, 1.8, 2, 2.2, 2.4, 2.6, 2.8, 3];
   assert.deepEqual(Motor.DEFAULT_TORQUES, expected);
   assert.deepEqual(Motor.parseTorqueLevels(Motor.DEFAULT_TORQUES.join(',')), expected);
   for (let index = 1; index < expected.length; index++) near(Motor.DEFAULT_TORQUES[index] - Motor.DEFAULT_TORQUES[index - 1], .2);
@@ -37,6 +65,11 @@ test('恒转矩默认0至3、间隔0.2，保留自定义单值、多值、正负
   assert.deepEqual(Motor.parseTorqueLevels('-0.75'), [-.75]);
   assert.deepEqual(Motor.parseTorqueLevels('+.25; -2e0 0 0.25 -0'), [-2, 0, .25]);
   assert.deepEqual(Motor.parseTorqueLevels('1000'), [1000]);
+  const geometry = Preview.geometryFor({ model: Motor.createModel(), levels: expected, visible: { torque: true, voltage: true } }, { x: [-6, 4], y: [-4, 4] });
+  const torqueLines = geometry.lines.filter(line => line.kind === 'torque');
+  assert.equal(torqueLines.length, 31);
+  assert.ok(torqueLines.slice(0, 15).every(line => line.width === .85 && line.opacity === .3));
+  assert.ok(geometry.lines.filter(line => line.kind === 'voltage-level').every(line => line.width === .85 && line.opacity === .35));
 });
 
 test('恒转矩输入拒绝空值、表达式、非有限数与过多曲线', () => {

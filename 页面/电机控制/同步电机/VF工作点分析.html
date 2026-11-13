@@ -22,14 +22,14 @@
   <main class="motor-workbench">
     <section id="motor-parameters" class="parameter-strip" aria-label="电机标幺参数"></section>
     <section class="vf-settings" aria-label="VF参数">
-      <label>V/f系数<input id="vfRatio" type="number" min="0" step="any" value="0.8"></label>
+      <label title="标幺电压/频率的斜率；无补偿、未限幅时U=kVF×|频率|">电压/频率比<input id="vfRatio" type="number" min="0" step="any" value="0.8"></label>
       <label>低速补偿<input id="voltageBoost" type="number" min="0" step="any" value="0"></label>
       <label>电压上限<input id="voltageLimit" type="number" min="0" step="any" value="1"></label>
       <label>电流边界<input id="currentLimit" type="number" min="0" step="any" value="1"></label>
     </section>
     <section class="angle-control" aria-label="电压相角"><label for="angle-slider">δ / °</label><input id="angle-slider" type="range" min="-180" max="180" step="0.5" value="110" aria-label="电压相对转子d轴的角度"><input id="angleDeg" type="number" step="any" value="110" aria-label="电压相角度数"><label class="point-toggle"><input id="show-point" type="checkbox" checked>工作点</label></section>
     <section class="plot-controls" aria-label="图层">
-      <div class="curve-switches"><label title="最大转矩/电流，转换到当前转速的电压坐标"><input id="show-mtpa" type="checkbox" checked><span class="line-key mtpa"></span>MTPA</label><label title="最大转矩/电压，计入电阻与当前转速"><input id="show-mtpv" type="checkbox" checked><span class="line-key mtpv"></span>MTPV</label><label><input id="show-voltage" type="checkbox" checked><span class="line-key voltage"></span>VF轨迹</label><label><input id="show-current" type="checkbox" checked><span class="line-key current"></span>电流</label><label><input id="show-torque" type="checkbox" checked><span class="line-key torque"></span>恒转矩</label><label><input id="show-pf" type="checkbox" checked><span class="line-key pf"></span>PF</label></div>
+      <div class="curve-switches"><label title="最大转矩/电流，转换到当前转速的电压坐标"><input id="show-mtpa" type="checkbox" checked><span class="line-key mtpa"></span>MTPA</label><label title="最大转矩/电压，计入电阻与当前转速"><input id="show-mtpv" type="checkbox" checked><span class="line-key mtpv"></span>MTPV</label><label title="粗实线为当前电压，点线为参考电压族"><input id="show-voltage" type="checkbox" checked><span class="line-key voltage"></span>等电压</label><label><input id="show-current" type="checkbox" checked><span class="line-key current"></span>电流</label><label><input id="show-torque" type="checkbox" checked><span class="line-key torque"></span>恒转矩</label><label><input id="show-pf" type="checkbox" checked><span class="line-key pf"></span>PF</label></div>
       <div class="heat-controls"><select id="heat-quantity" aria-label="颜色图分布量"><option value="none">无颜色图</option><option value="torque" selected>转矩 T</option><option value="mechanical">机械功率</option><option value="active">有功 P</option><option value="reactive">无功 Q</option><option value="apparent">视在 S</option></select><select id="color-scale" aria-label="色标范围"><option value="fixed">固定色标</option><option value="auto">自动色标</option></select><input id="color-limit" type="number" min="0.1" step="any" value="2" aria-label="色标上限pu"><button id="reset-view" class="tool-button" type="button" title="恢复初始视图" aria-label="恢复初始视图">⊙</button><button id="reset" class="tool-button" type="button" title="恢复默认参数" aria-label="恢复默认参数">↺</button></div>
     </section>
     <p id="input-error" class="error-message" role="alert" hidden></p>
@@ -41,13 +41,14 @@
     <output id="operating-summary" class="vf-summary"></output>
     <footer class="analysis-footer">
       <details><summary>工作点 / pu</summary><div class="model-copy"><div id="probe-readout" class="probe-readout"></div><p id="operating-state"></p></div></details>
-      <details><summary>参考线</summary><div class="model-copy vf-reference"><label>恒转矩 / pu <input id="torque-values" type="text" value="0,0.2,0.4,0.6,0.8,1,1.2,1.4,1.6,1.8,2,2.2,2.4,2.6,2.8,3" aria-label="恒转矩标幺值列表" title="默认0～3 pu、间隔0.2；可自定义，最多32条"></label></div></details>
+      <details><summary>参考线</summary><div class="model-copy vf-reference"><label>恒转矩 / pu <input id="torque-values" type="text" value="-3,-2.8,-2.6,-2.4,-2.2,-2,-1.8,-1.6,-1.4,-1.2,-1,-0.8,-0.6,-0.4,-0.2,0,0.2,0.4,0.6,0.8,1,1.2,1.4,1.6,1.8,2,2.2,2.4,2.6,2.8,3" aria-label="恒转矩标幺值列表" title="默认−3～3 pu、间隔0.2；可自定义，最多32条"></label><label>电压 / pu <input id="voltage-values" type="text" value="0,0.2,0.4,0.6,0.8,1,1.2,1.4,1.6,1.8,2" aria-label="参考电压标幺值列表" title="默认0～2 pu、间隔0.2；非负幅值，最多32条"></label><p>蓝色点线为参考电压，粗实线为当前电压。零电压没有电压方向，不绘制定向轨迹。底色与恒转矩线仅对应当前电压，不能用于读取其他电压曲线的转矩。</p></div></details>
       <details><summary>模型定义</summary><div class="model-copy">
         <p>采用同步稳态、定子电压矢量定向坐标：U<sub>d,u</sub>=Uout，U<sub>q,u</sub>=0。I<sub>q,u</sub>一般不为0；Iq=0参考线在Id&gt;0时为PF=1，在Id&lt;0时为PF=−1。全部量为标幺值。</p>
         <p class="equation">Uout = min(Umax, Uboost + kVF |ω|)<br>δ = θ电压 − θ转子<br>转子电压 vd = Uout cosδ，vq = Uout sinδ<br>Id,u = id cosδ + iq sinδ，Iq,u = −id sinδ + iq cosδ</p>
-        <p>沿VF电压轨迹改变δ，先求解原转子dq稳态方程，再旋转电流。相角是分析参数，并不意味着开环VF能控制或测得转子相角。选定工作点所需的平衡负载等于显示的电磁转矩（未计机械损耗）；没有机械动态、启动、失步或稳定性判定。</p>
+        <p>kVF是标幺电压对标幺频率的斜率，不是转矩系数。例如kVF=0.8、频率0.5 pu，无补偿且未限幅时，输出电压为0.4 pu。原“VF轨迹”表示当前电压下的电流工作点集合，不是电压随频率或时间变化的曲线。</p>
+        <p>蓝色粗实线为当前电压，点线为默认0.2～2 pu、间隔0.2的参考电压族。每条曲线保持自身电压幅值与当前频率，改变δ后先求解原转子dq稳态方程，再旋转电流；参考电压不被Umax限幅。相角是分析参数，并不意味着开环VF能控制或测得转子相角。选定工作点所需的平衡负载等于显示的电磁转矩（未计机械损耗）；没有机械动态、启动、失步或稳定性判定。</p>
         <p class="equation">P = Uout Id,u · Q = −Uout Iq,u · S = Uout |I|<br>Pmech = P − Rs |I|² · T = Pmech / ω（ω≠0）</p>
-        <p>底色与恒转矩线是上述功率平衡关系，只有电压轨迹上的点同时满足电机方程；轨迹以外不是该VF给定下可实现的工作点。零速不由功率推算转矩，实际点仍由转子方程求T。零电压无电压定向，奇异方程不伪造唯一工作点。MTPA/MTPV为不同电压幅值下的参考族经逐点旋转所得，并非当前VF轨迹。</p>
+        <p>底色与恒转矩线是当前Uout下的功率平衡关系，只有当前电压轨迹上的点同时满足该VF给定的电机方程；不能把底色或恒转矩线的数值读到其他电压参考曲线上。零速不由功率推算转矩，实际点仍由转子方程求T。零电压无电压定向，奇异方程不伪造唯一工作点。MTPA/MTPV为不同电压幅值下的参考族经逐点旋转所得，并非当前电压轨迹。</p>
         <p>恒定参数模型的转子dq MTPA由电感和磁链决定，不直接依赖转速；这里的电压坐标投影使用当前转速。MTPV按包含Rs与当前转速的电压方程求极值。初始取景包含当前边界上的优化参考点，不表示整条无界参考轨迹都在屏幕内，也不表示所有参考点满足电流上限。</p>
         <p class="reference-links"><a href="同步电机分析.html">转子定向分析</a> · <a href="https://www.mathworks.com/help/mcb/ref/vbyfcontroller.html" target="_blank" rel="noopener noreferrer">V/f控制依据</a> · <a href="https://www.mathworks.com/help/mcb/ref/mtpacontrolreference.html" target="_blank" rel="noopener noreferrer">转子方程依据</a></p>
       </div></details>

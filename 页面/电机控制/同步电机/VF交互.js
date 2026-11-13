@@ -19,6 +19,7 @@
     for (const [key] of specifications) byId(key + '-slider').value = VF.DEFAULTS[key];
     byId('speed-slider').value = VF.DEFAULTS.speedPU; byId('angle-slider').value = VF.DEFAULTS.angleDeg;
     byId('torque-values').value = Rotor.DEFAULT_TORQUES.join(',');
+    byId('voltage-values').value = Rotor.DEFAULT_VOLTAGES.join(',');
   }
   function fitView(bounds) {
     const width = Math.max(1, plot.clientWidth - (plot.clientWidth < 450 ? 49 : 75));
@@ -55,14 +56,15 @@
   function readScene() {
     const model = VF.createModel(Object.fromEntries(valueKeys.map(key => [key, byId(key).valueAsNumber])));
     const levels = Rotor.parseTorqueLevels(byId('torque-values').value), point = VF.atAngle(model);
+    const voltageLevels = Rotor.parseVoltageLevels(byId('voltage-values').value);
     let heat = byId('heat-quantity').value;
     if (heat === 'none' || model.reason || (heat === 'torque' && model.input.speedPU === 0)) heat = null;
     const maximum = byId('color-scale').value === 'auto' ? (scene?.maximum || 1) : byId('color-limit').valueAsNumber;
     if (heat && (!Number.isFinite(maximum) || maximum <= 0 || (byId('color-scale').value === 'fixed' && maximum < .1))) throw new RangeError('color-limit');
     const visible = Object.fromEntries(['voltage', 'current', 'torque', 'pf', 'mtpa', 'mtpv'].map(key => [key, byId('show-' + key).checked]));
-    const style = getComputedStyle(document.body), colors = Object.fromEntries(['mtpa', 'mtpv', 'torque', 'pf', 'boundary', 'text', 'muted', 'surface', 'line'].map(key => [key, style.getPropertyValue('--' + key).trim()]));
-    const result = { model, levels, visible, heat, maximum, colors, frame: 'voltage', point, probe: { direct: point?.direct || 0, quadrature: point?.quadrature || 0, visible: Boolean(point && byId('show-point').checked) } };
-    result.geometryKey = [Object.entries(model.input).filter(([key]) => key !== 'angleDeg'), visible, levels];
+    const style = getComputedStyle(document.body), colors = Object.fromEntries(['mtpa', 'mtpv', 'torque', 'pf', 'boundary', 'voltage', 'voltage-level', 'text', 'muted', 'surface', 'line'].map(key => [key, style.getPropertyValue('--' + key).trim()]));
+    const result = { model, levels, voltageLevels, visible, heat, maximum, colors, frame: 'voltage', point, probe: { direct: point?.direct || 0, quadrature: point?.quadrature || 0, visible: Boolean(point && byId('show-point').checked) } };
+    result.geometryKey = [Object.entries(model.input).filter(([key]) => key !== 'angleDeg'), visible, levels, voltageLevels];
     result.geometry = bounds => VF.geometry(result, bounds); result.grid = (bounds, count) => VF.grid(model, bounds, count);
     byId('speed-value').textContent = model.input.speedPU.toFixed(2);
     byId('color-limit').disabled = byId('color-scale').value === 'auto' || !heat;
@@ -96,7 +98,7 @@
       }
       direct.push(null); quadrature.push(null);
     }
-    return { type: 'scatter', mode: line.dots ? 'markers' : 'lines', name: line.name, x: direct, y: quadrature, meta: { kind: line.kind }, line: { color: colors[line.kind], width: line.width, dash: line.dash.length ? 'dash' : 'solid' }, opacity: line.opacity, marker: { size: 7, color: colors[line.kind] }, connectgaps: false, hoverinfo: 'skip' };
+    return { type: 'scatter', mode: line.dots ? 'markers' : 'lines', name: line.name, x: direct, y: quadrature, meta: { kind: line.kind, voltage: line.voltage }, line: { color: colors[line.kind], width: line.width, dash: line.dash[0] === 2 ? 'dot' : line.dash.length ? 'dash' : 'solid' }, opacity: line.opacity, marker: { size: 7, color: colors[line.kind] }, connectgaps: false, hoverinfo: 'skip' };
   }
   async function render() {
     if (rendering || preview?.active) { pending = true; return; }
@@ -133,7 +135,7 @@
     } catch (error) { showError(error); }
     finally { rendering = false; if (pending && !preview?.active) schedule(); }
   }
-  for (const key of ['vfRatio', 'voltageBoost', 'voltageLimit', 'currentLimit', 'torque-values', 'color-limit']) byId(key).addEventListener('input', schedule);
+  for (const key of ['vfRatio', 'voltageBoost', 'voltageLimit', 'currentLimit', 'torque-values', 'voltage-values', 'color-limit']) byId(key).addEventListener('input', schedule);
   for (const [slider, input] of [['speed-slider', 'speedPU'], ['angle-slider', 'angleDeg']]) {
     byId(slider).addEventListener('input', event => { byId(input).value = event.target.value; previewInput(); });
     byId(slider).addEventListener('change', settle);

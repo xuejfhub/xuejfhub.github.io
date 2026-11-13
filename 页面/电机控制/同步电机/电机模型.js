@@ -7,7 +7,8 @@
     speedPU: 1, currentLimit: 1, voltageLimit: 1 });
   const LIMITS = Object.freeze({ resistance: [0, Infinity], ld: [0, Infinity], lq: [0, Infinity], flux: [0, Infinity],
     speedPU: [-2, 2], currentLimit: [0, Infinity], voltageLimit: [0, Infinity] });
-  const DEFAULT_TORQUES = Object.freeze(Array.from({ length: 16 }, (_, index) => index / 5));
+  const DEFAULT_TORQUES = Object.freeze(Array.from({ length: 31 }, (_, index) => (index - 15) / 5));
+  const DEFAULT_VOLTAGES = Object.freeze(Array.from({ length: 11 }, (_, index) => index / 5));
 
   function parseTorqueLevels(text) {
     if (typeof text !== 'string' || !text.trim()) throw new RangeError('torque-values');
@@ -31,6 +32,14 @@
       if (!Number.isFinite(input[key]) || input[key] < minimum || input[key] > maximum) throw new RangeError(key);
     }
     return input;
+  }
+
+  function parseVoltageLevels(text) {
+    try {
+      const levels = parseTorqueLevels(text);
+      if (levels.some(value => value < 0)) throw new RangeError('voltage-values');
+      return levels;
+    } catch { throw new RangeError('voltage-values'); }
   }
 
   function createModel(values = {}) {
@@ -236,6 +245,6 @@
     return { x: directAxis, y: quadratureAxis, fields, feasible };
   }
 
-  return { DEFAULTS, LIMITS, DEFAULT_TORQUES, parseTorqueLevels, parameters, createModel, evaluate,
+  return { DEFAULTS, LIMITS, DEFAULT_TORQUES, DEFAULT_VOLTAGES, parseTorqueLevels, parseVoltageLevels, parameters, createModel, evaluate,
     mtpa, currentAtVoltage, mtpv, locus, torqueCurves, powerFactorCurves, voltageCurves, grid };
 });

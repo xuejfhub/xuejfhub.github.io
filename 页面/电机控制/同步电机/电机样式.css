@@ -1,6 +1,6 @@
 html { height: 100%; overflow: hidden; }
-.motor-page { --mtpa: #18794e; --mtpv: #ad3386; --torque: #a75b08; --pf: #007b98; --boundary: #465464; height: 100dvh; min-height: 0; overflow: hidden; display: flex; flex-direction: column; font-family: "Segoe UI", "Microsoft YaHei", sans-serif; letter-spacing: 0; line-height: 1.5; }
-:root[data-theme="dark"] .motor-page { --mtpa: #5bce95; --mtpv: #f88bcd; --torque: #f5c366; --pf: #63d9ed; --boundary: #c0cbd8; }
+.motor-page { --mtpa: #18794e; --mtpv: #ad3386; --torque: #a75b08; --pf: #007b98; --boundary: #465464; --voltage: #4266b0; --voltage-level: var(--voltage); height: 100dvh; min-height: 0; overflow: hidden; display: flex; flex-direction: column; font-family: "Segoe UI", "Microsoft YaHei", sans-serif; letter-spacing: 0; line-height: 1.5; }
+:root[data-theme="dark"] .motor-page { --mtpa: #5bce95; --mtpv: #f88bcd; --torque: #f5c366; --pf: #63d9ed; --boundary: #c0cbd8; --voltage: #91b3ff; }
 .motor-header { height: 44px; flex: 0 0 auto; padding: 6px 14px; display: flex; align-items: center; gap: 22px; border-bottom: 1px solid var(--line); background: var(--surface); }
 .motor-header h1 { margin: 0; font-size: 19px; font-weight: 650; }
 .motor-header .back-link { white-space: nowrap; flex-shrink: 0; }
@@ -29,7 +29,7 @@ html { height: 100%; overflow: hidden; }
 .motor-page .torque-entry input { width: 112px; }
 .line-key { display: inline-block; width: 18px; flex-shrink: 0; border-top: 2px solid; height: 0; vertical-align: middle; }
 .line-key.mtpa { color: var(--mtpa); }.line-key.mtpv { color: var(--mtpv); }.line-key.torque { color: var(--torque); }.line-key.pf { color: var(--pf); }
-.line-key.current { color: var(--boundary); border-top-style: dashed; }.line-key.voltage { color: var(--boundary); }.line-key.minor { color: var(--muted); border-top-style: dashed; opacity: .55; }
+.line-key.current { color: var(--boundary); border-top-style: dashed; }.line-key.voltage { color: var(--voltage); }.line-key.minor { color: var(--muted); border-top-style: dashed; opacity: .55; }
 .heat-controls, .view-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }.view-tools { margin-left: auto; }
 .heat-controls input[type="number"] { width: 56px; }
 .tool-button { display: grid; place-items: center; width: 29px; height: 29px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); font-size: 19px; }

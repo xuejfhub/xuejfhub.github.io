@@ -15,7 +15,7 @@
   const geometryCache = new Map(), cacheStats = { hits: 0, misses: 0 };
   let probe = { direct: -.5, quadrature: .7 };
   let probeIndex = 0, view = null;
-  let torqueLevels = [...Motor.DEFAULT_TORQUES], probeVisible = false, pointerPress = null;
+  let torqueLevels = [...Motor.DEFAULT_TORQUES], voltageLevels = [...Motor.DEFAULT_VOLTAGES], probeVisible = false, pointerPress = null;
 
   for (const [key, label, maximum, step] of specifications) {
     const field = document.createElement('div');
@@ -45,6 +45,7 @@
     byId('speedPU').value = values.speedPU; byId('speed-slider').value = values.speedPU;
     for (const [key, preset] of boundaryInputs) { byId(key).value = values[key]; byId(preset).value = ''; }
     byId('torque-values').value = Motor.DEFAULT_TORQUES.join(','); byId('torque-preset').value = '';
+    byId('voltage-values').value = Motor.DEFAULT_VOLTAGES.join(',');
   }
 
   function readModel() {
@@ -142,7 +143,7 @@
       byId('color-max').textContent = format(maximum, 2) + ' pu';
       byId('color-ramp').style.background = positive ? 'linear-gradient(90deg,#f5f8f4,#8fccc3,#36a9ac,#146c94)' : '';
     }
-    if (byId('show-torque').checked) for (const curve of computed.torques) data.push(lineTrace(curve.points, `T = ${curve.level} pu`, 'torque', colors.torque, curve.level === 1 ? 2.5 : 1.3, curve.level === 1 ? 'solid' : 'dash', curve.level === 1 ? 1 : .45));
+    if (byId('show-torque').checked) for (const curve of computed.torques) data.push(lineTrace(curve.points, `T = ${curve.level} pu`, 'torque', colors.torque, curve.level === 1 ? 2.5 : curve.level < 0 ? .85 : 1.3, curve.level === 1 ? 'solid' : 'dash', curve.level === 1 ? 1 : curve.level < 0 ? .3 : .45));
     if (byId('show-pf').checked) for (const curve of computed.factors) data.push(lineTrace(curve.points, `PF = ${curve.level}`, 'pf', colors.pf, curve.level === 1 ? 2.5 : 1.25, curve.level === 1 ? 'solid' : 'dash', curve.level === 1 ? 1 : .44));
     if (byId('show-mtpa').checked) data.push(lineTrace(computed.mtpa, 'MTPA', 'mtpa', colors.mtpa, 2.8));
     if (byId('show-mtpv').checked) data.push(lineTrace(computed.mtpv, 'MTPV · 含 Rs', 'mtpv', colors.mtpv, 2.8));
@@ -156,8 +157,16 @@
     }
     if (byId('show-voltage').checked) {
       const amplitude = model.input.voltageLimit;
-      const trace = lineTrace(coordinates(Motor.voltageCurves(model, amplitude, extent, 1000), extent), `|U| = ${amplitude} pu`, 'voltage', colors.boundary, 2);
-      if (amplitude === 0) Object.assign(trace, { mode: 'markers', marker: { size: 7, color: colors.boundary } });
+      for (const level of voltageLevels) {
+        if (level === amplitude) continue;
+        const reference = lineTrace(coordinates(Motor.voltageCurves(model, level, extent, 720), extent), `参考 |U| = ${level} pu`, 'voltage-level', colors['voltage-level'], .85, 'dot', .35);
+        reference.meta.voltage = level;
+        if (level === 0) Object.assign(reference, { mode: 'markers', marker: { size: 6, color: colors['voltage-level'] } });
+        data.push(reference);
+      }
+      const trace = lineTrace(coordinates(Motor.voltageCurves(model, amplitude, extent, 1000), extent), `|U| = ${amplitude} pu`, 'voltage', colors.voltage, 1.6, 'solid', .8);
+      trace.meta.voltage = amplitude;
+      if (amplitude === 0) Object.assign(trace, { mode: 'markers', marker: { size: 7, color: colors.voltage } });
       data.push(trace);
     }
     probeIndex = data.length;
@@ -228,9 +237,9 @@
   function previewParameterChange() {
     if (!preview || !lastScene || plot.dataset.stale === 'true') { schedule(); return; }
     try {
-      model = readModel(); torqueLevels = Motor.parseTorqueLevels(byId('torque-values').value);
+      model = readModel(); torqueLevels = Motor.parseTorqueLevels(byId('torque-values').value); voltageLevels = Motor.parseVoltageLevels(byId('voltage-values').value);
       updateValues(); updateProbe();
-      preview.setScene({ ...lastScene, model, levels: [...torqueLevels], visible: visibleLayers(), probe: { ...probe, visible: probeVisible } });
+      preview.setScene({ ...lastScene, model, levels: [...torqueLevels], voltageLevels: [...voltageLevels], visible: visibleLayers(), probe: { ...probe, visible: probeVisible } });
       preview.request(view);
       clearTimeout(parameterPreviewTimer); parameterPreviewTimer = setTimeout(finishPan, 120);
     } catch { finishPan(); schedule(); }
@@ -243,13 +252,15 @@
     try {
       const candidate = readModel();
       const selectedTorques = Motor.parseTorqueLevels(byId('torque-values').value);
+      const selectedVoltages = Motor.parseVoltageLevels(byId('voltage-values').value);
       if (byId('show-heat').checked && byId('color-scale').value === 'fixed' && (!byId('color-limit').validity.valid || !Number.isFinite(byId('color-limit').valueAsNumber))) throw new RangeError('color-limit');
       model = candidate;
       torqueLevels = selectedTorques;
+      voltageLevels = selectedVoltages;
       byId('input-error').hidden = true; plot.dataset.stale = 'false';
     } catch (error) {
       const field = [...specifications, ['speedPU', '转速'], ...boundaryInputs.map(([key, , label]) => [key, label])].find(([key]) => key === error.message);
-      byId('input-error').textContent = error.message === 'torque-values' ? '恒转矩：请输入1～32个有限标幺值，用逗号分隔，可正、可负或为零。' : field ? field[0] === 'speedPU' ? '转速：请输入 −2 至 2 的有效标幺值。' : `${field[1]}：请输入大于或等于 0 的有限标幺值。` : '色标范围无效。';
+      byId('input-error').textContent = error.message === 'voltage-values' ? '参考电压：请输入1～32个非负有限标幺值，用逗号分隔。' : error.message === 'torque-values' ? '恒转矩：请输入1～32个有限标幺值，用逗号分隔，可正、可负或为零。' : field ? field[0] === 'speedPU' ? '转速：请输入 −2 至 2 的有效标幺值。' : `${field[1]}：请输入大于或等于 0 的有限标幺值。` : '色标范围无效。';
       byId('input-error').hidden = false; plot.dataset.stale = 'true'; return;
     }
     updateValues();
@@ -265,7 +276,7 @@
       if (!view) view = fitView();
       const extent = Math.max(.1, ...view.x.map(Math.abs), ...view.y.map(Math.abs));
       const style = getComputedStyle(document.body);
-      const colors = Object.fromEntries(['mtpa', 'mtpv', 'torque', 'pf', 'boundary', 'text', 'muted', 'surface', 'line'].map(key => [key, style.getPropertyValue('--' + key).trim()]));
+      const colors = Object.fromEntries(['mtpa', 'mtpv', 'torque', 'pf', 'boundary', 'voltage', 'voltage-level', 'text', 'muted', 'surface', 'line'].map(key => [key, style.getPropertyValue('--' + key).trim()]));
       const narrow = plot.clientWidth < 450;
       const axis = { fixedrange: false, gridcolor: colors.line, zerolinecolor: colors.muted, zerolinewidth: 1, tickfont: { size: narrow ? 10 : 11 }, nticks: 9, constrain: 'range' };
       const geometryStarted = performance.now(), data = traces(extent, colors), geometryMs = performance.now() - geometryStarted;
@@ -281,7 +292,7 @@
       byId('plot-status').hidden = true;
       if (!preview) preview = window.MotorPreview.create(plot);
       const heatTrace = data.find(trace => trace.meta.kind === 'heat');
-      lastScene = { model, levels: [...torqueLevels], visible: visibleLayers(), heat: heatTrace?.meta.quantity || null,
+      lastScene = { model, levels: [...torqueLevels], voltageLevels: [...voltageLevels], visible: visibleLayers(), heat: heatTrace?.meta.quantity || null,
         maximum: heatTrace?.zmax || 1, colors, probe: { ...probe, visible: probeVisible } };
       preview.setScene(lastScene);
       if (!preview.active) { view = { x: [...plot._fullLayout.xaxis.range], y: [...plot._fullLayout.yaxis.range] }; preview.hide(); }
@@ -313,6 +324,7 @@
   byId('speed-slider').addEventListener('change', finishPan);
   byId('speedPU').addEventListener('input', event => { byId('speed-slider').value = event.target.value; schedule(); });
   byId('torque-values').addEventListener('input', () => { byId('torque-preset').value = ''; schedule(); });
+  byId('voltage-values').addEventListener('input', schedule);
   byId('torque-preset').addEventListener('change', event => {
     if (event.target.value === '') return;
     byId('torque-values').value = event.target.value; event.target.value = ''; schedule();

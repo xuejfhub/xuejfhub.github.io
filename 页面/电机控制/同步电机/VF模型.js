@@ -26,17 +26,27 @@
       vq: -point.vd * Math.sin(angle) + point.vq * Math.cos(angle), angleDeg: angle * 180 / Math.PI };
   }
 
-  function atAngle(model, angleDeg = model.input.angleDeg) {
+  function atVoltage(model, voltage, angleDeg = model.input.angleDeg) {
     if (!Number.isFinite(angleDeg)) throw new RangeError('angleDeg');
-    if (model.reason) return null;
+    if (!Number.isFinite(voltage) || voltage < 0) throw new RangeError('voltage');
+    if (voltage === 0) return null;
     const angle = (angleDeg % 360) * Math.PI / 180;
-    const point = Rotor.currentAtVoltage(model, model.outputVoltage, angle);
+    const point = Rotor.currentAtVoltage(model, voltage, angle);
     return point ? rotatePoint(model, point.direct, point.quadrature, angle) : null;
   }
 
+  function atAngle(model, angleDeg = model.input.angleDeg) {
+    return atVoltage(model, model.outputVoltage, angleDeg);
+  }
+
+  function voltageTrajectory(model, voltage, count = 720) {
+    if (!Number.isFinite(voltage) || voltage < 0) throw new RangeError('voltage');
+    if (voltage === 0 || !Rotor.currentAtVoltage(model, voltage, 0)) return [];
+    return Array.from({ length: count + 1 }, (_, index) => atVoltage(model, voltage, -180 + index * 360 / count));
+  }
+
   function trajectory(model, count = 720) {
-    if (model.reason) return [];
-    return Array.from({ length: count + 1 }, (_, index) => atAngle(model, -180 + index * 360 / count));
+    return voltageTrajectory(model, model.outputVoltage, count);
   }
 
   function field(model, direct, quadrature) {
@@ -80,10 +90,17 @@
     const { model, visible, levels } = scene;
     const extent = Math.max(.1, ...bounds.x.map(Math.abs), ...bounds.y.map(Math.abs));
     const lines = [];
-    const add = (kind, name, branches, width = 2, opacity = 1, dash = [], dots = false) => lines.push({ kind, name, branches, width, opacity, dash, dots });
-    if (visible.voltage) add('boundary', 'VF 电压轨迹', [trajectory(model)], 2.5, 1, [], model.input.speedPU === 0);
+    const add = (kind, name, branches, width = 2, opacity = 1, dash = [], dots = false, voltage) => lines.push({ kind, name, branches, width, opacity, dash, dots, voltage });
+    if (visible.voltage) {
+      for (const voltage of scene.voltageLevels || Rotor.DEFAULT_VOLTAGES) {
+        if (voltage === model.outputVoltage) continue;
+        const points = voltageTrajectory(model, voltage);
+        if (points.length) add('voltage-level', `参考 |U| = ${voltage} pu`, [points], .85, .35, [2, 4], model.input.speedPU === 0, voltage);
+      }
+      add('voltage', `当前电压 |U| = ${model.outputVoltage} pu`, [trajectory(model)], 1.6, .8, [], model.input.speedPU === 0, model.outputVoltage);
+    }
     if (visible.current) add('boundary', '电流边界', [Array.from({ length: 361 }, (_, index) => ({ direct: model.input.currentLimit * Math.cos(index * Math.PI / 180), quadrature: model.input.currentLimit * Math.sin(index * Math.PI / 180) }))], 1.8, 1, [7, 6], model.input.currentLimit === 0);
-    if (visible.torque) for (const level of levels) add('torque', `T = ${level} pu`, torqueCurves(model, level, bounds), level === 1 ? 2.5 : 1.3, level === 1 ? 1 : .45, level === 1 ? [] : [7, 6]);
+    if (visible.torque) for (const level of levels) add('torque', `T = ${level} pu`, torqueCurves(model, level, bounds), level === 1 ? 2.5 : level < 0 ? .85 : 1.3, level === 1 ? 1 : level < 0 ? .3 : .45, level === 1 ? [] : [7, 6]);
     if (visible.pf && model.outputVoltage > 0) {
       add('pf', 'Iq = 0', [[{ direct: bounds.x[0], quadrature: 0 }, { direct: bounds.x[1], quadrature: 0 }]], 2.5);
       for (const factor of [-.9, -.7, -.5, .5, .7, .9]) for (const direction of [-1, 1]) {
@@ -101,5 +118,5 @@
     return { bounds, extent, lines };
   }
 
-  return { DEFAULTS, createModel, atAngle, trajectory, field, grid, torqueCurves, geometry };
+  return { DEFAULTS, createModel, atVoltage, atAngle, voltageTrajectory, trajectory, field, grid, torqueCurves, geometry };
 });

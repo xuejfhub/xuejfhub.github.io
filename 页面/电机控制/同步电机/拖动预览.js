@@ -32,7 +32,7 @@
     const extent = Math.max(.1, ...bounds.x.map(Math.abs), ...bounds.y.map(Math.abs));
     const lines = [];
     const add = (kind, branches, width, opacity = 1, dash = [], dots = false) => lines.push({ kind, branches, width, opacity, dash, dots });
-    if (visible.torque) for (const level of levels) add('torque', Motor.torqueCurves(model, level, extent, 480, bounds), level === 1 ? 2.5 : 1.3, level === 1 ? 1 : .45, level === 1 ? [] : [7, 6]);
+    if (visible.torque) for (const level of levels) add('torque', Motor.torqueCurves(model, level, extent, 480, bounds), level === 1 ? 2.5 : level < 0 ? .85 : 1.3, level === 1 ? 1 : level < 0 ? .3 : .45, level === 1 ? [] : [7, 6]);
     if (visible.pf) for (const factor of [-1, -.9, -.7, -.5, .5, .7, .9, .95, 1]) add('pf', Motor.powerFactorCurves(model, factor, extent, 480, bounds), factor === 1 ? 2.5 : 1.25, factor === 1 ? 1 : .44, factor === 1 ? [] : [7, 6]);
     if (visible.mtpa) add('mtpa', Motor.locus(model, 'mtpa', extent, 160), 2.8);
     if (visible.mtpv) add('mtpv', Motor.locus(model, 'mtpv', extent, 160), 2.8);
@@ -40,7 +40,13 @@
       const angle = index * Math.PI / 180;
       return { direct: model.input.currentLimit * Math.cos(angle), quadrature: model.input.currentLimit * Math.sin(angle) };
     })], 1.8, 1, [7, 6], model.input.currentLimit === 0);
-    if (visible.voltage) add('boundary', Motor.voltageCurves(model, model.input.voltageLimit, extent, 480), 2, 1, [], model.input.voltageLimit === 0);
+    if (visible.voltage) {
+      for (const voltage of scene.voltageLevels || Motor.DEFAULT_VOLTAGES) {
+        if (voltage === model.input.voltageLimit) continue;
+        add('voltage-level', Motor.voltageCurves(model, voltage, extent, 480), .85, .35, [2, 4], voltage === 0);
+      }
+      add('voltage', Motor.voltageCurves(model, model.input.voltageLimit, extent, 480), 1.6, .8, [], model.input.voltageLimit === 0);
+    }
     return { bounds, extent, lines };
   }
 
@@ -187,7 +193,7 @@ void main() {
       }
       context.setTransform(density, 0, 0, density, 0, 0); context.clearRect(0, 0, width, height);
       drawHeat(view);
-      const key = JSON.stringify(scene.geometryKey || [scene.model.input, scene.visible, scene.levels]);
+      const key = JSON.stringify(scene.geometryKey || [scene.model.input, scene.visible, scene.levels, scene.voltageLevels]);
       if (!cache || cache.key !== key || !covers(cache.bounds, view) || (view.x[1] - view.x[0]) < (cache.bounds.x[1] - cache.bounds.x[0]) / 5) {
         cache = { key, ...geometryFor(scene, paddedBounds(view)) }; stats.geometryBuilds++;
       }

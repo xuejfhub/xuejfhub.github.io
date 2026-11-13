@@ -4,6 +4,27 @@ const VF = require('../页面/电机控制/同步电机/VF模型.js');
 const Rotor = require('../页面/电机控制/同步电机/电机模型.js');
 const near = (actual, expected, tolerance = 1e-9) => assert.ok(Math.abs(actual - expected) <= tolerance * Math.max(1, Math.abs(expected)), `${actual} != ${expected}`);
 
+test('VF参考电压独立于当前VF给定与限幅，零电压不伪造定向轨迹', () => {
+  for (const speedPU of [-1, .5, 2]) {
+    const model = VF.createModel({ speedPU, vfRatio: .1, voltageLimit: .5 });
+    for (const voltage of Rotor.DEFAULT_VOLTAGES) {
+      const points = VF.voltageTrajectory(model, voltage, 120);
+      assert.equal(points.length, voltage === 0 ? 0 : 121);
+      for (const point of points) {
+        near(point.vd, voltage); near(point.vq, 0); near(point.voltage, voltage);
+        near(Rotor.evaluate(model, point.rotorDirect, point.rotorQuadrature).voltage, voltage);
+        if (voltage > model.input.voltageLimit) assert.equal(point.feasible, false);
+      }
+    }
+  }
+  const stopped = VF.createModel({ speedPU: 0 });
+  const reference = VF.voltageTrajectory(stopped, .2, 30);
+  assert.equal(reference.length, 31);
+  for (const point of reference) { near(point.direct, 10); near(point.quadrature, 0); }
+  assert.deepEqual(VF.voltageTrajectory(VF.createModel({ speedPU: 0, resistance: 0 }), 1), []);
+  assert.throws(() => VF.voltageTrajectory(stopped, -1), RangeError);
+});
+
 test('VF电压幅值随频率绝对值变化，包含补偿与限幅', () => {
   for (const speedPU of [-2, -1, 0, .5, 2]) {
     const model = VF.createModel({ speedPU, vfRatio: .8, voltageBoost: .03, voltageLimit: 1 });
@@ -72,6 +93,15 @@ test('VF显隐几何保留独立轨迹和电流边界，隐藏图层为空', () 
   const model = VF.createModel(), bounds = { x: [-3, 3], y: [-2, 2] };
   const visible = { voltage: true, current: true, torque: true, pf: true, mtpa: true, mtpv: true };
   const result = VF.geometry({ model, visible, levels: [-1, 1] }, bounds);
+  assert.equal(result.lines.find(line => line.name === 'T = -1 pu').width, .85);
+  assert.equal(result.lines.find(line => line.name === 'T = -1 pu').opacity, .3);
+  assert.ok(result.lines.filter(line => line.kind === 'voltage-level').every(line => line.width === .85 && line.opacity === .35));
+  const voltageLines = result.lines.filter(line => ['voltage', 'voltage-level'].includes(line.kind));
+  assert.deepEqual(voltageLines.map(line => line.voltage).sort((first, second) => first - second), Rotor.DEFAULT_VOLTAGES.filter(voltage => voltage > 0));
+  for (const line of voltageLines) for (const point of line.branches.flat()) { near(point.voltage, line.voltage); near(point.vd, line.voltage); near(point.vq, 0); }
+  assert.equal(voltageLines.find(line => line.kind === 'voltage').voltage, model.outputVoltage);
+  const custom = VF.geometry({ model, visible: { voltage: true }, levels: [], voltageLevels: [0, .35, 2.4] }, bounds);
+  assert.deepEqual(custom.lines.map(line => line.voltage), [.35, 2.4, .8]);
   for (const kind of ['boundary', 'torque', 'pf', 'mtpa', 'mtpv']) assert.ok(result.lines.some(line => line.kind === kind));
   assert.deepEqual(VF.geometry({ model, visible: {}, levels: [] }, bounds).lines, []);
 });

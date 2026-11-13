@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>异步电机稳态分析 | 相量图与工作点</title>
+    <script src="https://cdn.bootcdn.net/ajax/libs/plotly.js/2.27.0/plotly.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/KaTeX/0.16.9/katex.min.css">
+    <script src="https://cdn.bootcdn.net/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+    <link rel="stylesheet" href="异步电机样式.css">
+</head>
+<body>
+
+<div id="header">
+    <a href="../../../index.html#motor" style="font-size:12px;color:#47775f;text-decoration:none;">← 返回内容索引</a>
+    <h1>异步电机稳态分析 · Induction Machine Steady-State</h1>
+    <div class="subtitle">基于 T 型等值电路 · 标幺值系统 (pu) · 多模式工作点求解</div>
+</div>
+
+<div id="layout">
+
+    <!-- ============ 左侧控制面板 ============ -->
+    <aside id="control-panel">
+
+        <div class="panel-block">
+            <h3>① 电机参数 (标幺值)</h3>
+            <div class="param-grid">
+                <label>定子电阻 <i>R<sub>s</sub></i>
+                    <input type="number" id="Rs" value="0.04" step="0.005" min="0">
+                </label>
+                <label>转子电阻 <i>R<sub>r</sub></i>
+                    <input type="number" id="Rr" value="0.04" step="0.005" min="0">
+                </label>
+                <label>定子漏感 <i>L<sub>ls</sub></i>
+                    <input type="number" id="Lls" value="0.10" step="0.005" min="0">
+                </label>
+                <label>转子漏感 <i>L<sub>lr</sub></i>
+                    <input type="number" id="Llr" value="0.10" step="0.005" min="0">
+                </label>
+                <label>互感 <i>L<sub>m</sub></i>
+                    <input type="number" id="Lm" value="2.00" step="0.05" min="0">
+                </label>
+                <label>极对数 <i>p</i>
+                    <input type="number" id="p" value="2" step="1" min="1">
+                </label>
+            </div>
+            <div class="derived-info">
+                L<sub>s</sub> = <span id="dLs">—</span> ·
+                L<sub>r</sub> = <span id="dLr">—</span> ·
+                σ = 1−L<sub>m</sub>²/(L<sub>s</sub>L<sub>r</sub>) = <span id="dSigma">—</span>
+            </div>
+        </div>
+
+        <div class="panel-block">
+            <h3>② 电源输入</h3>
+            <div class="slider-group">
+                <label class="slider-label">定子电压 <i>U<sub>s</sub></i> = <span id="val-Us" class="val">1.00</span> pu</label>
+                <div class="slider-row">
+                    <input type="range" id="Us-slider" min="0" max="1.5" step="0.01" value="1.00">
+                    <input type="number" id="Us" value="1.00" step="0.01" min="0" max="1.5">
+                </div>
+            </div>
+            <div class="slider-group">
+                <label class="slider-label">定子频率 <i>f<sub>s</sub></i> = <span id="val-fs" class="val">1.00</span> pu</label>
+                <div class="slider-row">
+                    <input type="range" id="fs-slider" min="0.10" max="1.5" step="0.01" value="1.00">
+                    <input type="number" id="fs" value="1.00" step="0.01" min="0.10" max="1.5">
+                </div>
+            </div>
+            <div class="derived-info">ω<sub>s</sub> = <span id="dWs">—</span> pu</div>
+        </div>
+
+        <div class="panel-block">
+            <h3>③ 运行模式</h3>
+            <select id="mode">
+                <option value="rotor">转子频率控制 (给定 f_r · 转子电流频率)</option>
+                <option value="torque">转矩模式 (给定 T<sub>em</sub>)</option>
+            </select>
+
+            <div class="mode-input" id="mode-rotor">
+                <label class="slider-label">转子频率 <i>f<sub>r</sub></i> = <span id="val-fr" class="val">0.030</span> pu (= 转差频率 f<sub>sl</sub>=s·f<sub>s</sub>)</label>
+                <div class="slider-row">
+                    <input type="range" id="fr-slider" min="-0.5" max="0.5" step="0.001" value="0.03">
+                    <input type="number" id="fr-input" value="0.03" step="0.001">
+                </div>
+                <div class="derived-info">当前 s = f<sub>r</sub>/f<sub>s</sub> = <span id="dS">—</span></div>
+            </div>
+            <div class="mode-input" id="mode-torque" style="display:none;">
+                <label>电磁转矩 <i>T<sub>em</sub></i> (pu)
+                    <input type="range" id="T-slider" min="-3" max="3" step="0.01" value="1.0">
+                    <input type="number" id="T-input" value="1.0" step="0.01">
+                </label>
+            </div>
+            <div class="derived-info" style="margin-top:8px;font-size:0.75rem;">
+                💡 转子频率固定时，改变 <i>U<sub>s</sub></i> 或 <i>f<sub>s</sub></i> 即可观察矢量随 V/f 的变化
+            </div>
+        </div>
+
+        <div class="panel-block">
+            <h3>④ 相量图显示</h3>
+            <div class="checkbox-grid" id="vector-toggles"></div>
+        </div>
+
+        <div class="panel-block">
+            <h3>⑤ 图表显示</h3>
+            <div class="checkbox-list" id="chart-toggles">
+                <label><input type="checkbox" id="show-phasor" checked> 相量图 (U / I / ψ)</label>
+                <label><input type="checkbox" id="show-circuit" checked> T 型等值电路</label>
+                <label><input type="checkbox" id="show-torque-curve" checked> 机械特性 T-n 曲线</label>
+                <label><input type="checkbox" id="show-current-curve" checked> 电流 / 功率因数曲线</label>
+                <label><input type="checkbox" id="show-flux-curve"> 磁链 - 转差率曲线</label>
+                <label><input type="checkbox" id="show-power-flow"> 功率流分配</label>
+            </div>
+        </div>
+
+        <div class="panel-block">
+            <button id="btn-reset" class="btn">恢复默认参数</button>
+        </div>
+    </aside>
+
+    <!-- ============ 右侧主显示区 ============ -->
+    <main id="main-area">
+
+        <!-- 工作点数值卡片 -->
+        <section id="op-cards" class="cards-row">
+            <div class="card"><div class="card-label">定子电流 |I<sub>s</sub>|</div><div class="card-value" id="vIs">—</div><div class="card-sub" id="aIs">—</div></div>
+            <div class="card"><div class="card-label">转子电流 |I<sub>r</sub>|</div><div class="card-value" id="vIr">—</div><div class="card-sub" id="aIr">—</div></div>
+            <div class="card"><div class="card-label">励磁电流 |I<sub>m</sub>|</div><div class="card-value" id="vIm">—</div><div class="card-sub" id="aIm">—</div></div>
+            <div class="card"><div class="card-label">气隙磁链 |ψ<sub>m</sub>|</div><div class="card-value" id="vPm">—</div><div class="card-sub" id="aPm">—</div></div>
+            <div class="card"><div class="card-label">定子磁链 |ψ<sub>s</sub>|</div><div class="card-value" id="vPs">—</div><div class="card-sub" id="aPs">—</div></div>
+            <div class="card"><div class="card-label">转子磁链 |ψ<sub>r</sub>|</div><div class="card-value" id="vPr">—</div><div class="card-sub" id="aPr">—</div></div>
+            <div class="card"><div class="card-label">电磁转矩 T<sub>em</sub></div><div class="card-value" id="vT">—</div><div class="card-sub">pu</div></div>
+            <div class="card"><div class="card-label">功率因数 cosφ</div><div class="card-value" id="vPF">—</div><div class="card-sub" id="aPF">—</div></div>
+            <div class="card"><div class="card-label">转速 n (pu)</div><div class="card-value" id="vN">—</div><div class="card-sub">同步速 = 1.0</div></div>
+        </section>
+
+        <!-- 相量图 -->
+        <section class="chart-block" id="block-phasor">
+            <div class="chart-title">
+                <h3>📐 稳态相量图 (以 U<sub>s</sub> 为参考方向)</h3>
+                <span class="hint">点击右侧图例可隐藏对应相量</span>
+            </div>
+            <div id="plot-phasor" class="plot-box"></div>
+        </section>
+
+        <!-- 等值电路 -->
+        <section class="chart-block" id="block-circuit">
+            <div class="chart-title"><h3>🔌 T 型单相稳态等值电路 (频率 f<sub>s</sub>，转差率 s)</h3></div>
+            <div id="circuit-container"></div>
+        </section>
+
+        <!-- 机械特性曲线 -->
+        <section class="chart-block" id="block-torque-curve">
+            <div class="chart-title"><h3>⚙️ 机械特性：电磁转矩 - 转速 (含当前工作点)</h3></div>
+            <div id="plot-torque" class="plot-box"></div>
+        </section>
+
+        <!-- 电流曲线 -->
+        <section class="chart-block" id="block-current-curve">
+            <div class="chart-title"><h3>⚡ 定子电流与功率因数 - 转差率</h3></div>
+            <div id="plot-current" class="plot-box"></div>
+        </section>
+
+        <!-- 磁链曲线 -->
+        <section class="chart-block" id="block-flux-curve">
+            <div class="chart-title"><h3>🧲 三种磁链 - 转差率</h3></div>
+            <div id="plot-flux" class="plot-box"></div>
+        </section>
+
+        <!-- 功率流 -->
+        <section class="chart-block" id="block-power-flow">
+            <div class="chart-title"><h3>🔋 功率流分配 (标幺值)</h3></div>
+            <div id="power-container"></div>
+        </section>
+
+        <!-- 公式说明 -->
+        <section class="chart-block formula-block">
+            <div class="chart-title"><h3>📚 稳态方程、求解方法与公式</h3></div>
+            <div class="formula-content">
+
+                <h4 class="fsec">一、T 型等值电路（频域复相量，频率为 $\omega_s$，转差率 $s$）</h4>
+                <p>定子漏阻抗：\(Z_s = R_s + j\omega_s L_{ls}\)；转子支路阻抗：\(Z_r = \dfrac{R_r}{s} + j\omega_s L_{lr}\)；励磁阻抗：\(Z_m = j\omega_s L_m\)。</p>
+
+                <h4 class="fsec">二、求解步骤（由 $\tilde U_s$ 解出所有量）</h4>
+                <p>① 励磁支路与转子支路并联：\(Z_p = \dfrac{Z_m \cdot Z_r}{Z_m + Z_r}\)；总输入阻抗 \(Z_{in} = Z_s + Z_p\)。</p>
+                <p>② 定子电流：\(\tilde I_s = \dfrac{\tilde U_s}{Z_{in}}\)。本页取 $\tilde U_s$ 沿实轴方向为相位参考。</p>
+                <p>③ 气隙电压（并联支路端电压）：\(\tilde U_m = \tilde U_s - Z_s\tilde I_s\)。</p>
+                <p>④ 由 KCL 分流：\(\tilde I_r = \dfrac{\tilde U_m}{Z_r}\)，\(\tilde I_m = \dfrac{\tilde U_m}{Z_m}\)，且 \(\tilde I_s = \tilde I_m + \tilde I_r\)。</p>
+
+                <h4 class="fsec">三、磁链（由 $\tilde\psi = \tilde U_L / j\omega_s$，或 $\tilde\psi = L\tilde I$）</h4>
+                <p>气隙磁链：\(\tilde\psi_m = L_m\tilde I_m = \dfrac{\tilde U_m}{j\omega_s}\)；</p>
+                <p>定子磁链：\(\tilde\psi_s = L_{ls}\tilde I_s + \tilde\psi_m\)；转子磁链：\(\tilde\psi_r = L_{lr}\tilde I_r + \tilde\psi_m\)。</p>
+
+                <h4 class="fsec">四、电磁转矩与功率</h4>
+                <p>电磁（气隙）功率：\(P_e = |\tilde I_r|^2 \cdot \dfrac{R_r}{s}\)；电磁转矩：\(T_{em} = \dfrac{P_e}{\omega_s}\)（标幺值，同步速基值）。</p>
+                <p>机械功率：\(P_m = (1-s)P_e\)；输入功率：\(P_{in} = \mathrm{Re}\{\tilde U_s \tilde I_s^*\}\)；功率因数：\(\cos\varphi = P_{in}/|\tilde S|\)。</p>
+
+                <h4 class="fsec">五、转子频率控制模式（本页核心）</h4>
+                <p>转子电流频率 \(f_r = s\cdot f_s\)（即转差频率）。给定 $f_r$ 时，\(s = \dfrac{f_r}{f_s}\)。</p>
+                <p>物理意义：保持 $f_r$ 不变，单独调 $U_s$ 时电流线性变化；若同时按 $U_s/f_s$ 恒定调节，则主磁通近似恒定、电流近似不变——这正是 <b>恒 V/f 标量控制</b> 的原理。</p>
+
+                <h4 class="fsec">六、转速关系</h4>
+                <p>同步速 $n_s = 1$（pu），转速 \(n = (1-s)\,n_s\)。</p>
+
+                <div class="formula-note">
+                    <b>注：</b>标幺值系统中 $\omega_s(\text{pu}) = f_s(\text{pu})$，电抗 $X = \omega_s \cdot L$；磁链基值 $\psi_{base} = U_{base}/\omega_{base}$。
+                    本页计算经过 Python 数值独立验证（默认参数 $s{=}0.03$ 下 $|I_s|{=}0.856$、$T_{em}{=}0.632$）。
+                </div>
+            </div>
+        </section>
+
+    </main>
+</div>
+
+<script src="异步电机交互.js"></script>
+</body>
+</html>

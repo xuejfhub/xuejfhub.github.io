@@ -1,0 +1,70 @@
+html { height: 100%; overflow: hidden; }
+.motor-page { --mtpa: #18794e; --mtpv: #ad3386; --torque: #a75b08; --pf: #007b98; --boundary: #465464; height: 100dvh; min-height: 0; overflow: hidden; display: flex; flex-direction: column; font-family: "Segoe UI", "Microsoft YaHei", sans-serif; letter-spacing: 0; line-height: 1.5; }
+:root[data-theme="dark"] .motor-page { --mtpa: #5bce95; --mtpv: #f88bcd; --torque: #f5c366; --pf: #63d9ed; --boundary: #c0cbd8; }
+.motor-header { height: 44px; flex: 0 0 auto; padding: 6px 14px; display: flex; align-items: center; gap: 22px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.motor-header h1 { margin: 0; font-size: 19px; font-weight: 650; }
+.motor-header .back-link { white-space: nowrap; flex-shrink: 0; }
+.back-link, .header-caption { color: var(--muted); font-size: 12px; }
+.header-caption { margin-left: auto; }.motor-header .icon-button { flex-shrink: 0; }
+.motor-workbench { width: 100%; flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 8px 14px 6px; }
+.motor-workbench > * { flex-shrink: 0; }
+.parameter-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 26px; padding: 0 0 12px; border-bottom: 1px solid var(--line); }
+.parameter-control { min-width: 0; }
+.parameter-control > label { display: flex; gap: 8px; margin-bottom: 5px; font-size: 12px; align-items: baseline; }
+.unit { color: var(--muted); font-size: 11px; margin-left: auto; }
+.slider-pair { display: grid; grid-template-columns: minmax(0, 1fr) 74px; gap: 12px; align-items: center; }
+.motor-page input[type="number"], .motor-page input[type="text"], .motor-page select { min-width: 0; max-width: 100%; height: 29px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--text); padding: 3px 5px; font-size: 12px; }
+.motor-page input[type="number"] { width: 100%; font-variant-numeric: tabular-nums; }
+.motor-page input[type="range"] { width: 100%; min-width: 0; margin: 0; accent-color: var(--accent); height: 20px; }
+.motor-page input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px; margin: 0; flex-shrink: 0; }
+.plot-controls { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; padding: 10px 0; font-size: 12px; }
+.curve-switches { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
+.curve-switches label, .heat-controls label, .view-tools label { display: flex; gap: 6px; align-items: center; cursor: pointer; white-space: nowrap; }
+.boundary-control { display: flex; align-items: center; gap: 4px; }
+.boundary-control label { gap: 4px; }
+.limit-entry { display: inline-flex; align-items: center; width: 83px; height: 29px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); }
+.motor-page .limit-entry input { width: 57px; height: 27px; border: 0; border-radius: 3px 0 0 3px; }
+.motor-page .limit-entry select { width: 24px; height: 27px; padding: 0; border: 0; border-left: 1px solid var(--line); border-radius: 0 3px 3px 0; cursor: pointer; }
+.limit-entry.torque-entry { width: 140px; }
+.motor-page .torque-entry input { width: 112px; }
+.line-key { display: inline-block; width: 18px; flex-shrink: 0; border-top: 2px solid; height: 0; vertical-align: middle; }
+.line-key.mtpa { color: var(--mtpa); }.line-key.mtpv { color: var(--mtpv); }.line-key.torque { color: var(--torque); }.line-key.pf { color: var(--pf); }
+.line-key.current { color: var(--boundary); border-top-style: dashed; }.line-key.voltage { color: var(--boundary); }.line-key.minor { color: var(--muted); border-top-style: dashed; opacity: .55; }
+.heat-controls, .view-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }.view-tools { margin-left: auto; }
+.heat-controls input[type="number"] { width: 56px; }
+.tool-button { display: grid; place-items: center; width: 29px; height: 29px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); font-size: 19px; }
+.color-legend { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: 10px; }
+#color-ramp { width: 84px; height: 8px; display: inline-block; background: linear-gradient(90deg,#3979ac,#a2c9dd,#f5f7ef,#efc59f,#cb5a4f); }
+.plot-stage { display: grid; grid-template-columns: minmax(0, 1fr) 64px; grid-template-rows: minmax(0, 1fr); flex: 1 1 0; gap: 8px; height: auto; min-height: 0; min-width: 0; }
+#dq-plot { position: relative; width: 100%; height: 100%; min-height: 0; min-width: 0; overflow: hidden; background: var(--surface); border: 1px solid var(--line); border-radius: 4px; }
+.pan-preview { position: absolute; z-index: 2; display: none; pointer-events: none; }
+#dq-plot[data-preview-active="true"] .scatterlayer, #dq-plot[data-preview-active="true"] .heatmaplayer { visibility: hidden; }
+#dq-plot[data-stale="true"] { opacity: .45; }
+.speed-rail { display: flex; flex-direction: column; align-items: center; min-height: 0; padding: 6px 0; gap: 3px; background: var(--soft); border-radius: 4px; }
+.speed-rail > label { font-size: 12px; }.speed-rail > output { font-family: Consolas, monospace; font-size: 18px; color: var(--accent); }.speed-unit { color: var(--muted); font-size: 10px; }
+.speed-track { flex: 1 1 0; min-height: 0; position: relative; width: 48px; }
+.speed-ticks { position: absolute; top: 6px; bottom: 6px; left: 1px; display: flex; flex-direction: column; justify-content: space-between; font-family: Consolas, monospace; font-size: 11px; color: var(--muted); }
+.motor-page #speed-slider { position: absolute; right: 1px; top: 6px; writing-mode: vertical-lr; direction: rtl; width: 24px; height: calc(100% - 12px); min-height: 0; touch-action: none; }
+.speed-rail #speedPU { width: 58px; font-size: 11px; }
+.plot-caption { display: flex; flex-wrap: wrap; gap: 8px 16px; padding: 8px 0; color: var(--muted); font-size: 11px; }.plot-caption > span { display: flex; align-items: center; gap: 6px; }.plot-caption output { margin-left: auto; }
+.plot-status, .model-note { color: var(--muted); font-size: 12px; margin: 8px 0; }
+.model-note, .error-message { max-height: 3em; overflow: auto; }
+.error-message { color: #b42335; background: #fff1f1; border-left: 3px solid #b42335; padding: 8px 12px; font-size: 12px; overflow-wrap: anywhere; }
+:root[data-theme="dark"] .error-message { color: #ffa7ad; background: #382023; border-color: #ffa7ad; }
+.probe-section { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 26px; padding: 12px; }
+.probe-heading { display: flex; align-items: center; gap: 12px; }.probe-heading h2 { font-size: 12px; margin: 0; }.probe-heading label { display: flex; gap: 5px; align-items: center; font-size: 12px; }.probe-heading input[type="number"] { width: 65px; }
+#probe-state { color: var(--muted); font-size: 11px; }
+.probe-readout { flex: 1; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 14px; min-width: 450px; }
+.readout { margin: 0; min-width: 0; }.readout dt { color: var(--muted); font-size: 10px; margin-bottom: 3px; }.readout dd { margin: 0; font-family: Consolas, "Microsoft YaHei", monospace; font-size: 15px; overflow-wrap: anywhere; }
+.analysis-footer { display: flex; align-items: center; gap: 24px; border-top: 1px solid var(--line); padding-top: 5px; font-size: 11px; }
+.analysis-footer summary { cursor: pointer; color: var(--muted); }
+.analysis-footer .probe-section, .model-copy { position: fixed; z-index: 30; bottom: 32px; left: 14px; right: 14px; max-height: min(340px, 65dvh); overflow: auto; margin: 0; padding: 14px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); box-shadow: 0 3px 20px #00000014; }
+.model-details { font-size: 12px; color: var(--muted); }.model-copy { line-height: 1.9; }.equation { color: var(--text); overflow-wrap: anywhere; }.reference-links a { color: var(--accent); text-decoration: underline; }
+@media (max-width: 950px) { .parameter-strip { gap: 15px; }.slider-pair { grid-template-columns: minmax(0, 1fr) 60px; gap: 7px; }.probe-readout { min-width: 100%; } }
+@media (max-width: 600px) {
+  .motor-header { gap: 10px; padding: 8px 10px; height: 48px; }.motor-header h1 { font-size: 16px; }.header-caption { display: none; }.motor-header .icon-button { margin-left: auto; }.back-link { font-size: 11px; }
+  .motor-workbench { padding: 6px 8px; }.parameter-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; }.plot-controls { gap: 7px; padding: 7px 0; }.curve-switches { gap: 7px 12px; }.curve-switches label { font-size: 11px; }.line-key { width: 14px; }
+  .plot-stage { grid-template-columns: minmax(0, 1fr) 54px; gap: 4px; }.speed-rail #speedPU { width: 50px; }.speed-rail > output { font-size: 16px; }
+  .plot-caption output { margin-left: 0; width: 100%; }.probe-heading { flex-wrap: wrap; gap: 9px; }.probe-readout { grid-template-columns: repeat(3, minmax(0, 1fr)); }.color-legend { width: 100%; }.view-tools { margin-left: 0; }
+}
+@media (max-width: 380px) { .motor-header h1 { font-size: 13px; line-height: 1.2; } }

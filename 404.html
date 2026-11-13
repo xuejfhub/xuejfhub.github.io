@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>页面位置已更新 · Xuejfhub</title><style>body{margin:10vh auto;padding:24px;max-width:640px;background:#f8f9f7;color:#252d2a;font:16px/1.9 system-ui,sans-serif}a{color:#47775f}h1{font-size:26px;font-weight:500}</style></head>
+<body><h1 id="message">没有找到这个页面</h1><p>首页现按电机控制、控制原理、数学原理组织内容。已保留的实验旧地址会自动跳转；其他旧页面已移除。</p><p><a id="destination" href="/index.html">返回首页</a></p>
+<script>
+(() => {
+  const routes = {
+    '页面/电机控制/PWM教学实验.html': '页面/电机控制/PWM实验/PWM教学实验.html',
+    '页面/电机控制/异步电机分析.html': '页面/电机控制/异步电机/异步电机分析.html',
+    'projects/tlspwm_graph.html': '页面/电机控制/PWM实验/PWM教学实验.html',
+    'projects/web/visualization/tlspwm_graph.html': '页面/电机控制/PWM实验/PWM教学实验.html',
+    '作品/PWM教学实验.html': '页面/电机控制/PWM实验/PWM教学实验.html',
+    '作品/网页/可视化/PWM教学实验.html': '页面/电机控制/PWM实验/PWM教学实验.html',
+    'projects/web/visualization/async_motor_steady_state.html': '页面/电机控制/异步电机/异步电机分析.html',
+    '作品/网页/可视化/异步电机稳态.html': '页面/电机控制/异步电机/异步电机分析.html'
+  };
+  let pathname;
+  try { pathname = decodeURIComponent(location.pathname); } catch { return; }
+  for (const [oldPath, newPath] of Object.entries(routes)) {
+    if (!pathname.endsWith('/' + oldPath)) continue;
+    const base = pathname.slice(0, -oldPath.length);
+    const destination = encodeURI(base + newPath) + location.search + location.hash;
+    document.getElementById('message').textContent = '正在打开新的中文地址';
+    const link = document.getElementById('destination'); link.href = destination; link.textContent = '打开新页面';
+    location.replace(destination); return;
+  }
+})();
+</script><noscript>请启用 JavaScript 使用旧地址跳转，或者返回首页浏览内容。</noscript></body>
+</html>

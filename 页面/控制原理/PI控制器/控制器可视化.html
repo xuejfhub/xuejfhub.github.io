@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark">
+<meta name="description" content="调节PI、阻尼与摩擦，在力—速度相平面中观察方向场与状态轨迹。">
+<title>PI 控制器 · 状态流向实验</title>
+<script src="../../../资源/公共/主题设置.js"></script>
+<link rel="stylesheet" href="../../../资源/公共/网站样式.css"><link rel="stylesheet" href="控制器样式.css">
+<script defer src="控制器模型.js"></script><script defer src="流场轨迹.js"></script><script defer src="控制器交互.js"></script>
+</head>
+<body class="controller-page">
+<a class="skip-link" href="#phase">跳到状态图</a>
+<header class="site-header"><div class="header-inner"><a class="brand" href="../../../index.html"><span class="brand-mark">x.</span><span>xuejfhub</span></a><a class="back-link" href="../../../index.html#control">← 控制原理</a><button class="icon-button" id="theme-toggle" type="button" aria-label="切换深浅色主题">◐</button></div></header>
+<main class="controller-shell">
+<section class="lab-intro"><div><p class="eyebrow">CONTROL LAB / 01</p><h1>看见控制的流向 <span class="demo-tag">PI DEMO</span></h1><p>从负阻尼的发散开始，调节 PI，跨越稳定边界。</p></div><div class="intro-note"><span class="live-dot"></span>连续系统 · 非线性相平面<br><span>方向场 / 极点 / 稳定区域</span></div></section>
+<noscript><p class="error">请启用 JavaScript 使用交互实验。模型说明仍可在页面底部阅读。</p></noscript>
+<div class="experiment-layout">
+<aside class="controls-panel">
+<div class="panel-heading"><h2>实验参数</h2><button type="button" id="reset-all" class="text-button">恢复默认</button></div>
+<label class="preset-label" for="preset">从一个场景开始</label><select id="preset"><option value="unstable" selected>负阻尼 · 发散</option><option value="boundary">同一对象 · 稳定边界</option><option value="stabilized">同一对象 · PI 稳定</option><option value="local">摩擦 · 局部稳定</option><option value="default">正阻尼 · 带摩擦的 PI</option><option value="oscillation">低阻尼 · 观察振荡</option><option value="smooth">高阻尼 · 平缓收敛</option><option value="friction">低速 · 摩擦的影响</option><option value="proportional">仅 P · 观察稳态误差</option><option value="custom" hidden>自定义参数</option></select>
+<div id="stability-quick" class="stability-quick" aria-live="polite"><strong id="quick-condition"></strong><span id="quick-margin"></span></div>
+<form id="parameters" novalidate><fieldset><legend><span>01</span> 目标与控制器</legend><div id="controller-fields"></div></fieldset><fieldset><legend><span>02</span> 被控对象</legend><div id="plant-fields"></div></fieldset><details class="initial-details"><summary>初始状态与观察时长</summary><div id="initial-fields"></div><p class="small-note">可在图中点击选点。积分初值由初始力与速度确定：I₀ = F₀ − Kp(r − v₀)。</p></details></form>
+<p class="small-note">b &lt; 0 表示随速度增强的助推作用，会向系统注入能量。参数采用标幺值：F 可对应转矩，v 对应转速，M 对应转动惯量。改参数后从所选起点重算。</p><p id="input-error" class="error" role="alert" hidden></p>
+</aside>
+<div class="results-panel">
+<section class="phase-panel" aria-labelledby="phase-heading">
+<div class="panel-heading phase-heading"><div><p class="eyebrow">PHASE PORTRAIT</p><h2 id="phase-heading">力—速度状态图</h2></div><span id="stability" class="status-badge"></span></div>
+<div class="plot-options"><label><input id="show-flow" type="checkbox" checked>渐隐轨迹流场</label><label><input id="show-nullclines" type="checkbox" checked>零变化曲线</label><button id="fit-view" class="text-button" type="button">适应视图</button></div>
+<div class="flow-settings" aria-label="背景短轨迹设置">
+<label for="flow-seeding">起点分布<select id="flow-seeding"><option value="uniform">均匀分布</option><option value="absolute">按 |散度| 加密</option><option value="square">按 散度² 加密</option></select></label>
+<label for="flow-density" class="flow-density-label">疏密<input id="flow-density" type="range" min="1" max="5" step="1" value="3"><output id="flow-density-value">3</output></label>
+<label for="flow-horizon">轨迹时长<select id="flow-horizon"><option value="0.25">0.25 s</option><option value="0.6">0.6 s</option><option value="1.2" selected>1.2 s</option><option value="2">2 s</option><option value="3">3 s</option><option value="5">5 s</option></select></label>
+<div class="flow-actions"><button id="flow-animate" type="button" aria-pressed="true">Ⅱ 暂停流场</button><button id="flow-complete" type="button">完整轨迹</button><output id="flow-clock" aria-label="背景流场时间"></output></div>
+</div>
+<div class="flow-caption"><span class="flow-ramp" aria-hidden="true"></span><span>深 → 浅：从起点向前演化</span><span class="flow-contract-key">蓝：局部收缩</span><span class="flow-expand-key">橙：局部扩张</span><span>灰：散度近零</span></div>
+<div id="phase-wrap"><svg id="phase" role="img" tabindex="0" aria-label="力—速度相平面。点击设置起点，方向键移动起点，空格播放或暂停。"></svg></div>
+<p id="flow-note" class="flow-note"></p>
+<div class="plot-legend"><span class="legend-item trajectory">当前轨迹</span><span class="legend-item target">目标速度 r</span><span class="legend-item velocity-null">dv/dt = 0</span><span class="legend-item force-null">dF/dt = 0</span><span>◇ PI 平衡点</span></div>
+<p class="plot-hint" id="plot-hint">点击图中设置主轨迹起点；背景短轨迹显示周围状态的演化。</p>
+<p id="simulation-note" class="simulation-note" role="status" hidden></p>
+<div class="playback"><button id="play" class="play-button" type="button" aria-pressed="false">▶ 播放主轨迹</button><button id="restart" class="restart-button" type="button" aria-label="回到轨迹起点">↺</button><label class="timeline-label" for="timeline">时间</label><input id="timeline" aria-label="轨迹时间" type="range" min="0" max="12" step="0.01" value="0"><output id="time-label">0.00 s</output><select id="playback-rate" aria-label="播放速度"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option></select></div>
+</section>
+<div class="state-readouts" aria-label="当前状态"><div><span>驱动力 F</span><strong id="read-force">—</strong><small id="read-df">—</small></div><div><span>速度 / 转速 v</span><strong id="read-speed">—</strong><small id="read-dv">—</small></div><div><span>跟踪误差 r − v</span><strong id="read-error">—</strong><small id="read-integral">—</small></div><div><span>阻力分解</span><strong id="read-resistance">—</strong><small id="read-components">阻尼 + 摩擦 + 负载</small></div></div>
+<section class="stability-panel" aria-labelledby="analysis-heading">
+<div class="stability-details"><p class="eyebrow">STABILITY / PI TUNING</p><h2 id="analysis-heading">怎样把系统调稳？</h2><p class="equation">Mλ² + (Kp + b<sub>eff</sub>)λ + Ki = 0</p><p class="stability-condition">Ki &gt; 0 &nbsp;且&nbsp; Kp + b<sub>eff</sub> &gt; 0</p><dl class="analysis-values"><div><dt>目标处有效阻尼 b<sub>eff</sub></dt><dd id="effective-damping"></dd></div><div><dt>距离稳定边界 Kp + b<sub>eff</sub></dt><dd id="damping-margin"></dd></div><div><dt>闭环极点 λ₁、λ₂</dt><dd id="pole-values"></dd></div><div><dt>极点最大实部</dt><dd id="max-real"></dd></div></dl><div class="tuning-actions"><button id="set-boundary" type="button">设到临界 Kp</button><button id="set-stable" type="button">调到稳定侧</button></div><p id="stability-note" class="small-note" aria-live="polite"></p></div>
+<div class="gain-map-panel"><svg id="gain-map" role="img" tabindex="0" aria-label="Kp—Ki局部稳定区域。点击选择PI增益，方向键微调，Shift加速。"></svg><p class="gain-legend"><span class="stable-key">绿色：局部渐近稳定</span><span class="unstable-key">红色：不稳定</span><span>虚线：Kp 临界值</span></p><p class="small-note">点击图中调节 Kp、Ki。灰色曲线分隔实极点与复极点；振荡形态变化不等于失稳。Ki = 0 的底边需单独分析。</p></div>
+</section>
+<section class="response-panel" aria-labelledby="response-heading"><div class="panel-heading"><h2 id="response-heading">同一条轨迹，放到时间里</h2><div class="response-key"><span class="velocity-text">━ 速度</span><span class="force-text">━ 驱动力</span><span class="target-text">┄ 目标</span></div></div><svg id="response" role="img" aria-label="速度和驱动力的时间曲线，上下分区使用独立纵轴"></svg></section>
+</div></div>
+<section class="explanation">
+<div><p class="eyebrow">HOW TO READ</p><h2>从一簇起点，看见汇聚与发散。</h2><p>横轴是控制器的驱动力，纵轴是系统速度。背景每条短轨迹都从一个采样起点出发，按同一段真实时间向前积分，起点最深，末端逐渐消失。轨迹长度保留快慢差异；动态展开同步展示这簇状态如何演化，暂停或“完整轨迹”可静止观察。青色主轨迹仍由下方时间轴独立控制。</p><p>散度 ∇·f = −[Kp + b + (Fc/vε) sech²(v/vε)] / M。蓝色段表示局部面积收缩，橙色表示局部扩张，灰色接近零。散度不是速度大小，也不单独等价于全局稳定性。均匀播种便于比较趋势；按散度加密会额外增加高 |散度| 区域的起点，因此线密度不能直接当作状态概率密度。</p><p>所有模式保留基础覆盖，线条在视窗边缘停止。橙色零变化曲线上速度瞬时不变，紫色曲线上驱动力瞬时不变。Ki &gt; 0 时，两条曲线交于目标速度上的平衡点。</p></div>
+<div class="equation-block"><p class="eyebrow">THE MODEL</p><p class="equation">M v̇ = F − b v − F<sub>c</sub> tanh(v / v<sub>ε</sub>) − L</p><p class="equation">F = K<sub>p</sub>(r − v) + I &nbsp;·&nbsp; İ = K<sub>i</sub>(r − v)</p><p class="equation emphasis">Ḟ = K<sub>i</sub>(r − v) − K<sub>p</sub> v̇</p><p>在目标平衡点 v = r 附近，b<sub>eff</sub> = b + (Fc/vε) sech²(r/vε)。上述条件严格保证线性化闭环渐近稳定，也保证非线性系统的局部渐近稳定；临界线上有摩擦时，线性化本身无法判定非线性稳定性。Kp+b&gt;0、Ki&gt;0 还是本模型全局渐近稳定的充分条件。</p><p>一阶对象加上 PI 积分器形成二维闭环。此版采用负阻尼，未加入纯延迟；纯延迟还需要过去状态，不能由当前 (F,v) 唯一确定箭头。摩擦为平滑库仑近似，不含静摩擦粘滞、Stribeck 效应或执行器限幅。Ki=0 时积分贡献冻结，终点依赖初值。</p><p class="reference-links">模型参考：<a href="https://www.mathworks.com/help/simscape/ref/translationalfriction.html" target="_blank" rel="noopener noreferrer">平滑摩擦</a> · <a href="https://www.mathworks.com/help/control/ug/pid-controller-types-for-tuning.html" target="_blank" rel="noopener noreferrer">并联 PI</a> · <a href="https://pages.mtu.edu/~tbco/cm416/stab2.html" target="_blank" rel="noopener noreferrer">二阶稳定判据</a> · <a href="https://venturi.soe.ucsc.edu/sites/default/files/COURSE_NOTE_5_Liouville_theorem.pdf" target="_blank" rel="noopener noreferrer">散度与局部面积变化</a></p></div>
+</section>
+</main>
+<footer class="site-footer controller-shell"><span>Xuejfhub / 控制原理</span><span>从方程到方向，从方向到轨迹。</span><a href="../../../index.html#control">返回分类 ↑</a></footer>
+</body></html>

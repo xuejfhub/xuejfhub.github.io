@@ -1,0 +1,12 @@
+# 仅适用于 GitHub Pages 默认 Jekyll 发布；自定义工作流应同步排除这些开发文件。
+exclude:
+  - README.md
+  - 文档
+  - 测试
+  - 临时测试
+  - 脚本/开发
+  - 脚本/桌面
+  - 脚本/视频制作
+  - 配置
+  - .vscode
+  - .github

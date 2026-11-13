@@ -7,7 +7,7 @@
     speedPU: 1, currentLimit: 1, voltageLimit: 1 });
   const LIMITS = Object.freeze({ resistance: [0, Infinity], ld: [0, Infinity], lq: [0, Infinity], flux: [0, Infinity],
     speedPU: [-2, 2], currentLimit: [0, Infinity], voltageLimit: [0, Infinity] });
-  const DEFAULT_TORQUES = Object.freeze([-1, -.5, .5, 1]);
+  const DEFAULT_TORQUES = Object.freeze(Array.from({ length: 16 }, (_, index) => index / 5));
 
   function parseTorqueLevels(text) {
     if (typeof text !== 'string' || !text.trim()) throw new RangeError('torque-values');

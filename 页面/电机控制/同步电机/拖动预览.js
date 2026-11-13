@@ -27,6 +27,7 @@
   }
 
   function geometryFor(scene, bounds) {
+    if (scene.geometry) return scene.geometry(bounds);
     const { model, visible, levels } = scene;
     const extent = Math.max(.1, ...bounds.x.map(Math.abs), ...bounds.y.map(Math.abs));
     const lines = [];
@@ -54,6 +55,8 @@ uniform vec4 motor;
 uniform float speed;
 uniform float colorMaximum;
 uniform int quantity;
+uniform int referenceFrame;
+uniform float outputVoltage;
 vec3 palette(float fraction, bool positive) {
   if (positive) {
     if (fraction < .35) return mix(vec3(245.,248.,244.),vec3(143.,204.,195.),fraction/.35)/255.;
@@ -74,6 +77,15 @@ void main() {
   if (quantity == 2) value = dot(voltage,current);
   if (quantity == 3) value = voltage.y*current.x-voltage.x*current.y;
   if (quantity == 4) value = length(voltage)*length(current);
+  if (referenceFrame == 1) {
+    float active = outputVoltage*current.x;
+    float mechanical = active-motor.x*dot(current,current);
+    value = speed == 0. ? 0. : mechanical/speed;
+    if (quantity == 1) value = mechanical;
+    if (quantity == 2) value = active;
+    if (quantity == 3) value = -outputVoltage*current.y;
+    if (quantity == 4) value = outputVoltage*length(current);
+  }
   bool positive = quantity == 4;
   float fraction = clamp(positive ? value/colorMaximum : (value/colorMaximum+1.)*.5,0.,1.);
   gl_FragColor = vec4(palette(fraction,positive),.72);
@@ -113,7 +125,7 @@ void main() {
         const buffer = gpu.createBuffer(); gpu.bindBuffer(gpu.ARRAY_BUFFER, buffer);
         gpu.bufferData(gpu.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gpu.STATIC_DRAW);
         const position = gpu.getAttribLocation(program, 'position'); gpu.enableVertexAttribArray(position); gpu.vertexAttribPointer(position, 2, gpu.FLOAT, false, 0, 0);
-        uniforms = Object.fromEntries(['minimumView', 'maximumView', 'motor', 'speed', 'colorMaximum', 'quantity'].map(name => [name, gpu.getUniformLocation(program, name)]));
+        uniforms = Object.fromEntries(['minimumView', 'maximumView', 'motor', 'speed', 'colorMaximum', 'quantity', 'referenceFrame', 'outputVoltage'].map(name => [name, gpu.getUniformLocation(program, name)]));
         const info = gpu.getExtension('WEBGL_debug_renderer_info');
         stats.renderer = gpu.getParameter(info ? info.UNMASKED_RENDERER_WEBGL : gpu.RENDERER);
       } catch (error) { gpuLost = true; stats.fallback = error.message; }
@@ -127,6 +139,13 @@ void main() {
       const currentMagnitude = Math.max(1, ...view.x.map(Math.abs), ...view.y.map(Math.abs));
       const roundoffScale = 2 * currentMagnitude * (resistance * currentMagnitude + Math.max(1, Math.abs(scene.model.input.speedPU)) * ((ld + lq) * currentMagnitude + flux));
       if (roundoffScale * 2 ** (3 - gpuPrecision) > scene.maximum * .002) return false;
+      if (scene.frame === 'voltage') {
+        if (!Number.isFinite(scene.model.outputVoltage) || scene.model.outputVoltage > 1e8) return false;
+        const divisor = scene.heat === 'torque' ? Math.abs(scene.model.input.speedPU) : 1;
+        if (divisor < 1e-5) return false;
+        const fieldScale = 2 * (scene.model.outputVoltage * currentMagnitude + resistance * currentMagnitude * currentMagnitude) / divisor;
+        if (fieldScale * 2 ** (3 - gpuPrecision) > scene.maximum * .002) return false;
+      }
       return ['x', 'y'].every(axis => (view[axis][1] - view[axis][0]) / Math.max(1, ...view[axis].map(Math.abs)) >= .002);
     }
 
@@ -141,10 +160,11 @@ void main() {
         const { resistance, ld, lq, flux } = scene.model.pu;
         gpu.uniform4f(uniforms.motor, resistance, ld, lq, flux); gpu.uniform1f(uniforms.speed, scene.model.input.speedPU);
         gpu.uniform1f(uniforms.colorMaximum, scene.maximum); gpu.uniform1i(uniforms.quantity, HEAT_KEYS.indexOf(scene.heat));
+        gpu.uniform1i(uniforms.referenceFrame, scene.frame === 'voltage' ? 1 : 0); gpu.uniform1f(uniforms.outputVoltage, scene.model.outputVoltage || 0);
         gpu.drawArrays(gpu.TRIANGLES, 0, 3); heatCanvas.style.display = 'block'; stats.backend = 'webgl'; stats.fallback = null; return;
       }
       if (gpu && program && !gpuLost && !gpu.isContextLost()) stats.fallback = 'numeric-precision';
-      const grid = Motor.grid(scene.model, 1, 81, view), field = grid.fields[scene.heat];
+      const grid = scene.grid ? scene.grid(view, 81) : Motor.grid(scene.model, 1, 81, view), field = grid.fields[scene.heat];
       for (let row = 0; row < 81; row++) for (let column = 0; column < 81; column++) {
         const color = colorFor(field[80 - row][column], scene.maximum, scene.heat === 'apparent');
         const offset = (row * 81 + column) * 4;
@@ -167,7 +187,7 @@ void main() {
       }
       context.setTransform(density, 0, 0, density, 0, 0); context.clearRect(0, 0, width, height);
       drawHeat(view);
-      const key = JSON.stringify([scene.model.input, scene.visible, scene.levels]);
+      const key = JSON.stringify(scene.geometryKey || [scene.model.input, scene.visible, scene.levels]);
       if (!cache || cache.key !== key || !covers(cache.bounds, view) || (view.x[1] - view.x[0]) < (cache.bounds.x[1] - cache.bounds.x[0]) / 5) {
         cache = { key, ...geometryFor(scene, paddedBounds(view)) }; stats.geometryBuilds++;
       }

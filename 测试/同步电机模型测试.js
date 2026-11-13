@@ -27,10 +27,13 @@ test('拖动预览扩大域覆盖新区域，隐藏图层不生成几何', () =>
   assert.deepEqual(geometry.lines[0].dash, [7, 6]); assert.deepEqual(geometry.lines[1].dash, []);
 });
 
-test('恒转矩输入默认±0.5/±1，支持单值、多值、正负成对和去重', () => {
-  assert.deepEqual(Motor.DEFAULT_TORQUES, [-1, -.5, .5, 1]);
-  assert.deepEqual(Motor.parseTorqueLevels('-1,-0.5,0.5,1'), Motor.DEFAULT_TORQUES);
-  assert.deepEqual(Motor.parseTorqueLevels('±0.5，±1'), Motor.DEFAULT_TORQUES);
+test('恒转矩默认0至3、间隔0.2，保留自定义单值、多值、正负成对和去重', () => {
+  const expected = [0, .2, .4, .6, .8, 1, 1.2, 1.4, 1.6, 1.8, 2, 2.2, 2.4, 2.6, 2.8, 3];
+  assert.deepEqual(Motor.DEFAULT_TORQUES, expected);
+  assert.deepEqual(Motor.parseTorqueLevels(Motor.DEFAULT_TORQUES.join(',')), expected);
+  for (let index = 1; index < expected.length; index++) near(Motor.DEFAULT_TORQUES[index] - Motor.DEFAULT_TORQUES[index - 1], .2);
+  assert.deepEqual(Motor.parseTorqueLevels('-1,-0.5,0.5,1'), [-1, -.5, .5, 1]);
+  assert.deepEqual(Motor.parseTorqueLevels('±0.5，±1'), [-1, -.5, .5, 1]);
   assert.deepEqual(Motor.parseTorqueLevels('-0.75'), [-.75]);
   assert.deepEqual(Motor.parseTorqueLevels('+.25; -2e0 0 0.25 -0'), [-2, 0, .25]);
   assert.deepEqual(Motor.parseTorqueLevels('1000'), [1000]);

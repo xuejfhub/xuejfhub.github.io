@@ -1,0 +1,24 @@
+.vf-page .parameter-strip { padding-bottom: 7px; }
+.vf-settings { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 20px; padding: 7px 0; }
+.vf-settings label { display: flex; align-items: center; gap: 8px; font-size: 12px; white-space: nowrap; }
+.vf-settings input { flex: 1; }
+.angle-control { display: grid; grid-template-columns: auto minmax(0, 1fr) 65px auto; gap: 12px; align-items: center; font-size: 12px; }
+.point-toggle { display: flex; gap: 5px; align-items: center; }
+.vf-summary { display: block; padding: 5px 0; color: var(--muted); font: 12px Consolas, "Microsoft YaHei", monospace; min-height: 27px; overflow-wrap: anywhere; }
+.vf-page .probe-readout { min-width: 0; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.vf-reference { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; }
+.vf-page .plot-controls { padding: 7px 0; gap: 7px 18px; }
+@media (max-width: 600px) {
+  .vf-settings { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 10px; padding: 5px 0; }
+  .vf-settings label { font-size: 11px; gap: 5px; }
+  .angle-control { grid-template-columns: auto minmax(0, 1fr) 55px auto; gap: 6px; }
+  .vf-page .heat-controls { gap: 5px; }
+  .vf-summary { font-size: 11px; min-height: 23px; padding: 3px 0; }
+  .vf-page .parameter-strip { gap: 4px 12px; }
+}
+@media (max-width: 600px) and (max-height: 650px) {
+  .vf-page .parameter-control > label { margin-bottom: 1px; font-size: 11px; }
+  .vf-page .slider-pair { grid-template-columns: minmax(0, 1fr) 60px; gap: 4px; }
+  .vf-page .parameter-strip { padding-bottom: 3px; }
+  .vf-page .plot-controls { gap: 4px; padding: 4px 0; }
+}

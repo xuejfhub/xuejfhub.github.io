@@ -6,13 +6,13 @@ const { createServer } = require('../脚本/开发/预览服务.js');
 const root = path.resolve(__dirname, '..');
 const home = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 
-test('首页只有三个指定分类和四个可用实验，同步分析指向真实页面', () => {
+test('首页只有三个指定分类和五个可用实验，两种同步分析指向真实页面', () => {
   const headings = [...home.matchAll(/<h2[^>]*>(.*?)<\/h2>/g)].map(match => match[1]);
   assert.deepEqual(headings, ['电机控制', '控制原理', '数学原理']);
   const entries = [...home.matchAll(/<h3[^>]*>(.*?)<\/h3>/g)].map(match => match[1]);
-  assert.deepEqual(entries, ['同步电机转子定向工作点分析', '异步电机分析', 'PWM', 'PI 控制器可视化']);
+  assert.deepEqual(entries, ['同步电机转子定向工作点分析', '同步电机VF定子电压定向工作点分析', '异步电机分析', 'PWM', 'PI 控制器可视化']);
   const pageLinks = [...home.matchAll(/href="(页面\/[^"]+\.html)"/g)].map(match => match[1]);
-  assert.deepEqual(pageLinks, ['页面/电机控制/同步电机/同步电机分析.html', '页面/电机控制/异步电机/异步电机分析.html', '页面/电机控制/PWM实验/PWM教学实验.html', '页面/控制原理/PI控制器/控制器可视化.html']);
+  assert.deepEqual(pageLinks, ['页面/电机控制/同步电机/同步电机分析.html', '页面/电机控制/同步电机/VF工作点分析.html', '页面/电机控制/异步电机/异步电机分析.html', '页面/电机控制/PWM实验/PWM教学实验.html', '页面/控制原理/PI控制器/控制器可视化.html']);
   assert.doesNotMatch(home, /pending-card|尚未添加分析页面/);
   for (const id of ['math']) {
     const section = home.match(new RegExp(`<section id="${id}"[\\s\\S]*?<\\/section>`))[0];
@@ -29,9 +29,9 @@ function htmlFiles(directory) {
   });
 }
 
-test('公开页面只含首页、404与四项实验，所有相对引用有效', () => {
+test('公开页面只含首页、404与五项实验，所有相对引用有效', () => {
   const files = htmlFiles(root);
-  assert.deepEqual(files.map(file => path.relative(root, file).split(path.sep).join('/')).sort(), ['404.html', 'index.html', '页面/电机控制/PWM实验/PWM教学实验.html', '页面/电机控制/同步电机/同步电机分析.html', '页面/电机控制/异步电机/异步电机分析.html', '页面/控制原理/PI控制器/控制器可视化.html'].sort());
+  assert.deepEqual(files.map(file => path.relative(root, file).split(path.sep).join('/')).sort(), ['404.html', 'index.html', '页面/电机控制/PWM实验/PWM教学实验.html', '页面/电机控制/同步电机/同步电机分析.html', '页面/电机控制/同步电机/VF工作点分析.html', '页面/电机控制/异步电机/异步电机分析.html', '页面/控制原理/PI控制器/控制器可视化.html'].sort());
   for (const file of files) {
     const html = fs.readFileSync(file, 'utf8');
     for (const match of html.matchAll(/(?:href|src)="([^"]+)"/g)) {

@@ -5,6 +5,8 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { spawn } = require('node:child_process');
 const { createServer } = require('../脚本/开发/预览服务.js');
+const defaultTorques = [0, .2, .4, .6, .8, 1, 1.2, 1.4, 1.6, 1.8, 2, 2.2, 2.4, 2.6, 2.8, 3];
+const defaultTorqueText = defaultTorques.join(',');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function until(check, message) {
   const start = Date.now();
@@ -65,7 +67,7 @@ test('真实浏览器：三分类首页、同步电机、PI控制器与PWM功能
     }
     await page.call('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
 
-    await t.test('同步电机：纯标幺、双向竖滑块、曲线显隐、缩放平移与离线绘图', async () => {
+    await t.test('同步电机：纯标幺、双向竖滑块、曲线显隐、缩放平移与离线绘图', async motorTest => {
       const evidence = path.resolve(__dirname, '../临时测试/2026-11-13-同步电机曲线');
       await fs.mkdir(evidence, { recursive: true });
       await navigate('页面/电机控制/同步电机/同步电机分析.html');
@@ -82,6 +84,12 @@ test('真实浏览器：三分类首页、同步电机、PI控制器与PWM功能
       const previewChecks = [];
       const nextPreview = frames => page.evaluate(`new Promise((resolve,reject)=>{const started=performance.now();const check=()=>{const plot=document.getElementById('dq-plot');if(Number(plot.dataset.previewFrameCount)>${frames})resolve(true);else if(performance.now()-started>5000)reject(new Error('按住拖动时预览帧未更新'));else setTimeout(check,8)};check()})`);
       async function heldPan({ moves = 3, fraction = .12, screenshot = '', loseContext = false } = {}) {
+        let previousCount = -1;
+        await until(async () => {
+          const state = await read('dq-plot'), count = Number(state.renderCount);
+          const settled = count > 0 && count === previousCount && state.previewActive !== 'true';
+          previousCount = count; return settled;
+        }, '开始拖动前的绘图未稳定');
         const before = await page.evaluate(`(()=>{const plot=document.getElementById('dq-plot'),bounds=plot.getBoundingClientRect(),layout=plot._fullLayout;return{count:Number(plot.dataset.renderCount),frames:Number(plot.dataset.previewFrameCount||0),builds:JSON.parse(plot.dataset.previewMetrics||'{}').geometryBuilds||0,view:JSON.parse(plot.dataset.view),start:{x:bounds.left+plot.clientLeft+layout.xaxis._offset+layout.xaxis._length*.08,y:bounds.top+plot.clientTop+layout.yaxis._offset+layout.yaxis._length*.6},width:layout.xaxis._length}})()`);
         let end = before.start, lastFrames = before.frames, held, contextLost = false;
         await page.call('Input.dispatchMouseEvent', { type: 'mouseMoved', ...before.start });
@@ -145,9 +153,10 @@ test('真实浏览器：三分类首页、同步电机、PI控制器与PWM功能
       for (const kind of ['mtpa', 'torque', 'pf', 'current', 'voltage']) assert.ok(traces.some(trace => trace.kind === kind && trace.points > 0), kind);
       assert.equal(traces.find(trace => trace.kind === 'probe').visible, false);
       assert.equal(traces.find(trace => trace.kind === 'probe').points, 0);
-      assert.deepEqual(traces.filter(trace => trace.kind === 'torque').map(trace => trace.name), ['T = -1 pu', 'T = -0.5 pu', 'T = 0.5 pu', 'T = 1 pu']);
+      assert.deepEqual(traces.filter(trace => trace.kind === 'torque').map(trace => trace.name), defaultTorques.map(level => `T = ${level} pu`));
+      assert.equal(await page.evaluate('document.getElementById("torque-values").value'), defaultTorqueText);
       assert.equal(await page.evaluate('document.getElementById("torque-step")'), null);
-      assert.deepEqual(await page.evaluate('[...document.getElementById("torque-preset").options].map(option=>option.value).filter(Boolean)'), ['-1,-0.5,0.5,1', '-1', '-0.5', '0.5', '1']);
+      assert.deepEqual(await page.evaluate('[...document.getElementById("torque-preset").options].map(option=>option.value).filter(Boolean)'), [defaultTorqueText, '-1,-0.5,0.5,1', '-1', '-0.5', '0.5', '1']);
       assert.equal(await page.evaluate('document.getElementById("dq-plot").layout.hovermode'), false);
       assert.ok(traces.some(trace => trace.kind === 'mtpv'));
       for (const [kind, name] of [['torque', 'T = 1 pu'], ['pf', 'PF = 1']]) {
@@ -156,9 +165,10 @@ test('真实浏览器：三分类首页、同步电机、PI控制器与PWM功能
       }
       assert.ok(await page.evaluate('[...document.querySelectorAll("#dq-plot .scatterlayer path.js-line")].some(path=>getComputedStyle(path).strokeDasharray!=="none")'));
       assert.ok(await page.evaluate('document.querySelectorAll("#dq-plot .scatterlayer path.js-line").length>12'));
+      await motorAction(`(async()=>{await Plotly.relayout(document.getElementById('dq-plot'),{'xaxis.range':[-6,4],'yaxis.range':[-4,4]});return true})()`);
       const torqueChecks = [];
-      for (const selection of ['-1', '-0.5', '0.5', '1', '-1,-0.5,0.5,1', '-0.75,0,0.75', '±0.625']) {
-        const preset = ['-1', '-0.5', '0.5', '1', '-1,-0.5,0.5,1'].includes(selection);
+      for (const selection of ['-1', '-0.5', '0.5', '1', '-1,-0.5,0.5,1', defaultTorqueText, '-0.75,0,0.75', '±0.625']) {
+        const preset = ['-1', '-0.5', '0.5', '1', '-1,-0.5,0.5,1', defaultTorqueText].includes(selection);
         await motorChange(preset ? 'torque-preset' : 'torque-values', selection, preset ? 'change' : 'input');
         const checked = await page.evaluate(`(()=>{const plot=document.getElementById('dq-plot'),model=SynchronousMotor.createModel(JSON.parse(plot.dataset.model).input);return plot.data.filter(trace=>trace.meta.kind==='torque').map(trace=>{const level=Number(trace.name.match(/^T = (.+) pu$/)[1]);const errors=trace.x.flatMap((direct,index)=>direct===null?[]:[Math.abs(SynchronousMotor.evaluate(model,direct,trace.y[index]).torque-level)]);return{level,count:errors.length,error:Math.max(0,...errors),dash:trace.line.dash}})})()`);
         const expected = selection === '±0.625' ? [-.625, .625] : selection.split(',').map(Number).sort((first, second) => first - second);
@@ -167,12 +177,15 @@ test('真实浏览器：三分类首页、同步电机、PI控制器与PWM功能
         assert.ok(checked.every(item => item.dash === (item.level === 1 ? 'solid' : 'dash')));
         torqueChecks.push({ selection, curves: checked });
       }
+      await motorAction('document.getElementById("reset-view").click()');
       const beforeInvalidTorque = (await read('dq-plot')).renderCount;
       await change('torque-values', 'invalid', 'input');
       await until(async () => (await read('dq-plot')).stale === 'true', '无效转矩列表没有提示');
       assert.equal((await read('dq-plot')).renderCount, beforeInvalidTorque);
       assert.ok(await page.evaluate('document.getElementById("input-error").textContent.includes("恒转矩")'));
       await motorAction('document.getElementById("reset").click()');
+      assert.equal(await page.evaluate('document.getElementById("torque-values").value'), defaultTorqueText);
+      assert.deepEqual(await page.evaluate('document.getElementById("dq-plot").data.filter(trace=>trace.meta.kind==="torque").map(trace=>trace.name)'), defaultTorques.map(level => `T = ${level} pu`));
       await motorAction(`(async()=>{await Plotly.relayout(document.getElementById('dq-plot'),{'xaxis.range':[-16,8],'yaxis.range':[-8,8]});return true})()`);
       assert.ok(await page.evaluate('document.getElementById("dq-plot").data.find(trace=>trace.meta.kind==="mtpv").x.some(Number.isFinite)'), '缩小视图后可以看到较小电感对应的MTPV');
       const boundaryChecks = [];
@@ -429,6 +442,10 @@ test('真实浏览器：三分类首页、同步电机、PI控制器与PWM功能
       await page.call('Page.navigate', { url: pathToFileURL(path.resolve(__dirname, '../页面/电机控制/同步电机/同步电机分析.html')).href });
       await until(() => page.evaluate('location.protocol==="file:" && Number(document.getElementById("dq-plot")?.dataset.renderCount)>0'), '直接打开HTML未能绘图');
       await page.call('Network.enable');
+      motorTest.after(async () => {
+        await page.call('Network.setBlockedURLs', { urls: [] });
+        await page.call('Network.setCacheDisabled', { cacheDisabled: false });
+      });
       await page.call('Network.setBlockedURLs', { urls: ['http://*', 'https://*'] });
       await page.call('Network.setCacheDisabled', { cacheDisabled: true });
       await page.call('Page.reload');
@@ -445,8 +462,122 @@ test('真实浏览器：三分类首页、同步电机、PI控制器与PWM功能
         assert.equal(fallback.backend, 'canvas2d'); assert.equal(fallback.fallback, 'webgl-unavailable');
       } finally { await page.call('Page.removeScriptToEvaluateOnNewDocument', { identifier: unavailable.identifier }); }
       await fs.writeFile(path.join(evidence, '实时预览验收.json'), JSON.stringify({ previewChecks, cacheCheck, sliderPreview, errors: page.errors }, null, 2));
-      await page.call('Network.setBlockedURLs', { urls: [] });
-      await page.call('Network.setCacheDisabled', { cacheDisabled: false });
+    });
+
+    await t.test('VF：电压定向工作点、GPU/CPU预览、退化边界与一屏布局', async () => {
+      const evidence = path.resolve(__dirname, '../临时测试/2026-11-13-VF工作点'); await fs.mkdir(evidence, { recursive: true });
+      await navigate('页面/电机控制/同步电机/VF工作点分析.html');
+      await until(() => page.evaluate('Number(document.getElementById("dq-plot").dataset.renderCount)>0'), 'VF未绘图');
+      assert.equal(await page.evaluate('document.getElementById("torque-values").value'), defaultTorqueText);
+      assert.deepEqual(await page.evaluate('document.getElementById("dq-plot").data.filter(trace=>trace.meta.kind==="torque").map(trace=>trace.name)'), defaultTorques.map(level => `T = ${level} pu`));
+      const action = async expression => { const before = Number((await read('dq-plot')).renderCount); await page.evaluate(expression); await until(async () => Number((await read('dq-plot')).renderCount) > before, 'VF未重绘'); };
+      const setValue = (id, value, event = 'input') => action(`(()=>{const field=document.getElementById('${id}');field.value=${JSON.stringify(String(value))};field.dispatchEvent(new Event('${event}',{bubbles:true}));})()`);
+      const initial = JSON.parse((await read('probe-readout')).point);
+      assert.ok(Math.abs(initial.vd - .8) < 1e-10 && Math.abs(initial.vq) < 1e-10);
+      assert.ok(Math.abs(initial.quadrature) > .01); assert.ok(initial.feasible);
+      const referenceSnapshot = () => page.evaluate(`(()=>{const plot=document.getElementById('dq-plot'),view=JSON.parse(plot.dataset.view);return Object.fromEntries(['mtpa','mtpv'].map(kind=>{const trace=plot.data.find(item=>item.meta.kind===kind),full=plot._fullData.find(item=>item.meta.kind===kind),paths=[...plot.querySelectorAll('.trace'+full.uid+' .js-line')];return[kind,{checked:document.getElementById('show-'+kind).checked,toolbar:!!document.querySelector('.curve-switches #show-'+kind),inside:trace.x.filter((direct,index)=>direct!==null&&direct>=view.x[0]&&direct<=view.x[1]&&trace.y[index]>=view.y[0]&&trace.y[index]<=view.y[1]).length,drawn:paths.some(path=>path.getTotalLength()>2),signature:JSON.stringify([trace.x,trace.y])}]}))})()`);
+      const initialReferences = await referenceSnapshot();
+      for (const kind of ['mtpa', 'mtpv']) { assert.equal(initialReferences[kind].checked, true); assert.equal(initialReferences[kind].toolbar, true); assert.ok(initialReferences[kind].inside > 2 && initialReferences[kind].drawn, kind + ' initial visible curve'); }
+      const pixels = [];
+      let contextLost = false;
+      for (const [index, heat] of ['torque', 'mechanical', 'active', 'reactive', 'apparent', 'active'].entries()) {
+        await setValue('heat-quantity', heat, 'change');
+        if (index === 5) contextLost = await page.evaluate(`(()=>{const context=document.getElementById('drag-heat').getContext('webgl'),extension=context?.getExtension('WEBGL_lose_context');if(!extension)return false;extension.loseContext();return true})()`);
+        const start = await page.evaluate(`(()=>{const plot=document.getElementById('dq-plot'),bounds=plot.getBoundingClientRect(),layout=plot._fullLayout;return{x:bounds.left+layout.xaxis._offset+60,y:bounds.top+layout.yaxis._offset+layout.yaxis._length*.6,frames:Number(plot.dataset.previewFrameCount||0),count:Number(plot.dataset.renderCount)}})()`);
+        await page.call('Input.dispatchMouseEvent', { type: 'mousePressed', x: start.x, y: start.y, button: 'left', clickCount: 1 });
+        let sample;
+        try {
+          await page.call('Input.dispatchMouseEvent', { type: 'mouseMoved', x: start.x + 70, y: start.y, button: 'left', buttons: 1 });
+          await until(async () => Number((await read('dq-plot')).previewFrameCount) > start.frames, 'VF按住时无预览');
+          sample = await page.evaluate(`(()=>{const plot=document.getElementById('dq-plot'),view=JSON.parse(plot.dataset.previewView),accelerated=plot.dataset.previewBackend==='webgl',canvas=document.getElementById(accelerated?'drag-heat':'drag-heat-cpu'),column=Math.floor(canvas.width*.02),row=Math.floor(canvas.height*.31);let rgba,direct,quadrature;if(accelerated){const context=canvas.getContext('webgl'),data=new Uint8Array(4);context.readPixels(column,row,1,1,context.RGBA,context.UNSIGNED_BYTE,data);rgba=[...data];direct=view.x[0]+(column+.5)/canvas.width*(view.x[1]-view.x[0]);quadrature=view.y[0]+(row+.5)/canvas.height*(view.y[1]-view.y[0]);}else{rgba=[...canvas.getContext('2d').getImageData(column,row,1,1).data];direct=view.x[0]+column/(canvas.width-1)*(view.x[1]-view.x[0]);quadrature=view.y[1]-row/(canvas.height-1)*(view.y[1]-view.y[0]);}const model=VoltageMotor.createModel(JSON.parse(plot.dataset.previewModel)),value=VoltageMotor.field(model,direct,quadrature)['${heat}'];return{heat:'${heat}',backend:plot.dataset.previewBackend,rgba,expected:MotorPreview.colorFor(value,2,'${heat}'==='apparent'),count:Number(plot.dataset.renderCount)}})()`);
+          assert.equal(sample.count, start.count); assert.ok(Math.abs(sample.rgba[3] - 184) <= 1);
+          assert.ok(sample.expected.every((channel, index) => Math.abs(channel - sample.rgba[index]) <= 3), JSON.stringify(sample)); pixels.push(sample);
+          if (index === 5 && contextLost) assert.equal(sample.backend, 'canvas2d');
+        } finally { await page.call('Input.dispatchMouseEvent', { type: 'mouseReleased', x: start.x + 70, y: start.y, button: 'left', clickCount: 1 }); }
+        await until(async () => { const state = await read('dq-plot'); return Number(state.renderCount) > start.count && state.previewActive === 'false'; }, 'VF松开未精绘');
+      }
+      await action('document.getElementById("reset-view").click()');
+      let previousReferences = await referenceSnapshot();
+      const speedChecks = [];
+      for (const speed of [-1, 2]) {
+        const previousView = JSON.parse((await read('dq-plot')).view);
+        await setValue('speedPU', speed);
+        const state = await read('dq-plot'), model = JSON.parse(state.model), currentView = JSON.parse(state.view), references = await referenceSnapshot();
+        assert.equal(model.outputVoltage, Math.min(1, .8 * Math.abs(speed)));
+        for (const kind of ['mtpa', 'mtpv']) assert.notEqual(references[kind].signature, previousReferences[kind].signature, kind + ' speed update');
+        for (const axis of ['x', 'y']) for (let index = 0; index < 2; index++) assert.ok(Math.abs(currentView[axis][index] - previousView[axis][index]) < 1e-7, '调速不能改变用户视野');
+        speedChecks.push({ speed, mtpaUpdated: true, mtpvUpdated: true, viewPreserved: true }); previousReferences = references;
+      }
+      await setValue('speedPU', 0); assert.equal(JSON.parse((await read('probe-readout')).point), null);
+      await setValue('voltageBoost', .02); assert.ok(Math.abs(JSON.parse((await read('probe-readout')).point).quadrature) < 1e-10);
+      await setValue('heat-quantity', 'torque', 'change'); assert.equal(await page.evaluate('document.getElementById("dq-plot").data.some(trace=>trace.meta.kind==="heat")'), false);
+      await setValue('resistance', 0); assert.equal(JSON.parse((await read('dq-plot')).model).reason, 'singular');
+      await action('document.getElementById("reset").click()');
+      await setValue('flux', 0); await setValue('lq', .2);
+      assert.ok(await page.evaluate('document.getElementById("model-note").textContent.includes("MTPA/MTPV无唯一解")'));
+      assert.ok(await page.evaluate('document.getElementById("dq-plot").data.filter(trace=>["mtpa","mtpv"].includes(trace.meta.kind)).every(trace=>trace.x.every(value=>value===null))'));
+      await action('document.getElementById("reset").click()');
+      await setValue('angleDeg', -80); assert.ok(Math.abs(JSON.parse((await read('probe-readout')).point).angleDeg + 80) < 1e-10);
+      await setValue('torque-values', '±0.7'); assert.equal(await page.evaluate('document.getElementById("dq-plot").data.filter(trace=>trace.meta.kind==="torque").length'), 2);
+      for (const layer of ['mtpa', 'mtpv']) {
+        await action(`document.getElementById('show-${layer}').click()`);
+        assert.equal(await page.evaluate(`document.getElementById('dq-plot').data.some(trace=>trace.meta.kind==='${layer}')`), false);
+        await action(`document.getElementById('show-${layer}').click()`);
+        assert.ok(await page.evaluate(`document.getElementById('dq-plot').data.some(trace=>trace.meta.kind==='${layer}')`));
+      }
+      await action('document.getElementById("show-point").click()'); assert.equal(await page.evaluate('document.getElementById("dq-plot").data.at(-1).visible'), false);
+      await action('document.getElementById("show-point").click();document.getElementById("reset").click()');
+      assert.equal(await page.evaluate('document.getElementById("torque-values").value'), defaultTorqueText);
+      assert.deepEqual(await page.evaluate('document.getElementById("dq-plot").data.filter(trace=>trace.meta.kind==="torque").map(trace=>trace.name)'), defaultTorques.map(level => `T = ${level} pu`));
+      const slider = await page.evaluate(`(()=>{const plot=document.getElementById('dq-plot'),bounds=document.getElementById('angle-slider').getBoundingClientRect();return{x:bounds.left+bounds.width*.6,y:bounds.top+bounds.height/2,step:bounds.width*.05,frames:Number(plot.dataset.previewFrameCount),count:Number(plot.dataset.renderCount)}})()`);
+      const nextFrame = frames => page.evaluate(`new Promise((resolve,reject)=>{const start=performance.now();const check=()=>{const plot=document.getElementById('dq-plot');if(Number(plot.dataset.previewFrameCount)>${frames})resolve({frames:Number(plot.dataset.previewFrameCount),builds:JSON.parse(plot.dataset.previewMetrics).geometryBuilds,count:Number(plot.dataset.renderCount),angle:JSON.parse(plot.dataset.previewModel).angleDeg,input:Number(document.getElementById('angleDeg').value),speed:JSON.parse(plot.dataset.previewModel).speedPU,speedInput:Number(document.getElementById('speedPU').value)});else if(performance.now()-start>5000)reject(new Error('VF滑块没有实时更新'));else setTimeout(check,8)};check()})`);
+      let sliderPreview;
+      await page.call('Input.dispatchMouseEvent', { type: 'mousePressed', x: slider.x, y: slider.y, button: 'left', clickCount: 1 });
+      try {
+        const first = await nextFrame(slider.frames);
+        await page.call('Input.dispatchMouseEvent', { type: 'mouseMoved', x: slider.x + slider.step, y: slider.y, button: 'left', buttons: 1 });
+        sliderPreview = await nextFrame(first.frames);
+        assert.equal(sliderPreview.angle, sliderPreview.input); assert.notEqual(sliderPreview.angle, first.angle);
+        assert.equal(sliderPreview.builds, first.builds, '只改相角应复用轨迹缓存'); assert.equal(sliderPreview.count, slider.count);
+      } finally { await page.call('Input.dispatchMouseEvent', { type: 'mouseReleased', x: slider.x + slider.step, y: slider.y, button: 'left', clickCount: 1 }); }
+      await until(async () => Number((await read('dq-plot')).renderCount) > slider.count, 'VF滑块松开后未精绘');
+      const speedSlider = await page.evaluate(`(()=>{const plot=document.getElementById('dq-plot'),bounds=document.getElementById('speed-slider').getBoundingClientRect();return{x:bounds.left+bounds.width/2,y:bounds.top+bounds.height*.35,step:bounds.height*.07,frames:Number(plot.dataset.previewFrameCount),count:Number(plot.dataset.renderCount)}})()`);
+      let speedPreview;
+      await page.call('Input.dispatchMouseEvent', { type: 'mousePressed', x: speedSlider.x, y: speedSlider.y, button: 'left', clickCount: 1 });
+      try {
+        const first = await nextFrame(speedSlider.frames);
+        await page.call('Input.dispatchMouseEvent', { type: 'mouseMoved', x: speedSlider.x, y: speedSlider.y + speedSlider.step, button: 'left', buttons: 1 });
+        speedPreview = await nextFrame(first.frames);
+        assert.equal(speedPreview.speed, speedPreview.speedInput); assert.notEqual(speedPreview.speed, first.speed);
+        assert.ok(speedPreview.builds > first.builds, '调速必须重算优化曲线'); assert.equal(speedPreview.count, speedSlider.count);
+      } finally { await page.call('Input.dispatchMouseEvent', { type: 'mouseReleased', x: speedSlider.x, y: speedSlider.y + speedSlider.step, button: 'left', clickCount: 1 }); }
+      await until(async () => Number((await read('dq-plot')).renderCount) > speedSlider.count, '调速松开后未精绘');
+      await action('document.getElementById("reset").click()');
+      await setValue('vfRatio', .001); await setValue('heat-quantity', 'apparent', 'change'); await setValue('color-scale', 'auto', 'change');
+      await setValue('angleDeg', 110); assert.equal((await read('dq-plot')).stale, 'false');
+      assert.ok(await page.evaluate('document.getElementById("dq-plot").data[0].zmax<.1'));
+      await action('document.getElementById("reset").click()'); await setValue('color-scale', 'fixed', 'change'); await setValue('heat-quantity', 'torque', 'change');
+      const layouts = [];
+      for (const [width, height] of [[320, 568], [390, 844], [1060, 554], [1440, 1000]]) {
+        await page.call('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: width < 768 });
+        await until(() => page.evaluate('document.getElementById("dq-plot")._fullLayout.width===document.getElementById("dq-plot").clientWidth'), 'VF尺寸未同步');
+        await action('document.getElementById("reset-view").click()');
+        const layout = await page.evaluate(`(()=>{const plot=document.getElementById('dq-plot'),bounds=plot.getBoundingClientRect(),header=document.querySelector('.motor-header').getBoundingClientRect(),heading=document.querySelector('h1').getBoundingClientRect();return{width:innerWidth,height:innerHeight,scrollWidth:document.documentElement.scrollWidth,scrollHeight:document.documentElement.scrollHeight,plotHeight:plot.clientHeight,renderedHeight:plot._fullLayout.height,bottom:bounds.bottom,headingBottom:heading.bottom,headerBottom:header.bottom}})()`);
+        assert.equal(layout.width, width); assert.ok(layout.scrollWidth <= width && layout.scrollHeight <= height);
+        assert.ok(layout.plotHeight >= 120); assert.ok(Math.abs(layout.plotHeight - layout.renderedHeight) < 2); assert.ok(layout.bottom <= height); assert.ok(layout.headingBottom <= layout.headerBottom); layouts.push(layout);
+        const references = await referenceSnapshot();
+        for (const kind of ['mtpa', 'mtpv']) assert.ok(references[kind].inside > 2 && references[kind].drawn, kind + ' visible at ' + width);
+        if (width === 390 || width === 1440) { const shot = await page.call('Page.captureScreenshot', {}); await fs.writeFile(path.join(evidence, `VF-${width}.png`), Buffer.from(shot.data, 'base64')); assert.equal(await page.evaluate('innerWidth'), width); }
+      }
+      await action('document.getElementById("theme-toggle").click()'); assert.equal(await page.evaluate('document.documentElement.dataset.theme'), 'dark');
+      await action('document.getElementById("theme-toggle").click()');
+      await page.call('Network.enable'); await page.call('Network.setBlockedURLs', { urls: ['http://*', 'https://*'] }); await page.call('Network.setCacheDisabled', { cacheDisabled: true });
+      try {
+        await page.call('Page.navigate', { url: pathToFileURL(path.resolve(__dirname, '../页面/电机控制/同步电机/VF工作点分析.html')).href });
+        await until(() => page.evaluate('location.protocol==="file:" && Number(document.getElementById("dq-plot")?.dataset.renderCount)>0'), 'VF离线绘图失败');
+        assert.ok(Math.abs(JSON.parse((await read('probe-readout')).point).torque - initial.torque) < 1e-12);
+      } finally { await page.call('Network.setBlockedURLs', { urls: [] }); await page.call('Network.setCacheDisabled', { cacheDisabled: false }); }
+      await fs.writeFile(path.join(evidence, 'VF验收.json'), JSON.stringify({ initial, initialReferences: Object.fromEntries(Object.entries(initialReferences).map(([kind, { signature, ...values }]) => [kind, values])), speedChecks, pixels, contextLost, sliderPreview, speedPreview, offline: true, layouts, errors: page.errors }, null, 2));
     });
 
     await navigate('页面/控制原理/PI控制器/控制器可视化.html');
@@ -871,8 +1002,8 @@ test('真实浏览器：三分类首页、同步电机、PI控制器与PWM功能
     assert.equal((await read('waveform')).probeAngle, (await read('modulator')).probeAngle);
     await navigate('index.html');
     assert.deepEqual(await page.evaluate('[...document.querySelectorAll("main h2")].map(el=>el.textContent)'), ['电机控制', '控制原理', '数学原理']);
-    assert.deepEqual(await page.evaluate('[...document.querySelectorAll(".experiment-card h3")].map(el=>el.textContent)'), ['同步电机转子定向工作点分析', '异步电机分析', 'PWM', 'PI 控制器可视化']);
-    assert.equal(await page.evaluate('document.querySelectorAll(".experiment-card[href]").length'), 4);
+    assert.deepEqual(await page.evaluate('[...document.querySelectorAll(".experiment-card h3")].map(el=>el.textContent)'), ['同步电机转子定向工作点分析', '同步电机VF定子电压定向工作点分析', '异步电机分析', 'PWM', 'PI 控制器可视化']);
+    assert.equal(await page.evaluate('document.querySelectorAll(".experiment-card[href]").length'), 5);
     assert.equal(await page.evaluate('document.querySelector(".pending-card") === null'), true);
     assert.equal(await page.evaluate('document.querySelector("a[href*=同步电机分析]") !== null'), true);
     assert.equal(await page.evaluate('document.querySelector("#search, #tags, #saved-only, #pagination") === null'), true);
@@ -893,11 +1024,11 @@ test('真实浏览器：三分类首页、同步电机、PI控制器与PWM功能
     await navigate(pwmLink);
     assert.equal((await read('space-3d')).stateCount, '27');
     await page.evaluate('document.querySelector(".site-header a[href*=index]").click()');
-    await until(() => page.evaluate('decodeURI(location.pathname) === "/index.html" && document.querySelectorAll(".experiment-card").length === 4'), '实验应能返回三分类首页');
+    await until(() => page.evaluate('decodeURI(location.pathname) === "/index.html" && document.querySelectorAll(".experiment-card").length === 5'), '实验应能返回三分类首页');
     await page.call('Emulation.setScriptExecutionDisabled', { value: true });
     await page.call('Page.reload');
     await until(() => page.evaluate('document.readyState === "complete"'), '无脚本首页加载超时');
-    assert.equal(await page.evaluate('document.querySelectorAll(".experiment-card[href]").length'), 4, '首页内容不依赖JS渲染');
+    assert.equal(await page.evaluate('document.querySelectorAll(".experiment-card[href]").length'), 5, '首页内容不依赖JS渲染');
     await page.call('Emulation.setScriptExecutionDisabled', { value: false });
     assert.deepEqual(page.errors, []);
   } finally {

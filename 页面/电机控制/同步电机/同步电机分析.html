@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="电机样式.css">
   <script defer src="第三方/绘图库.min.js"></script>
   <script defer src="电机模型.js"></script>
+  <script defer src="工作点分析.js"></script>
   <script defer src="拖动预览.js"></script>
   <script defer src="电机交互.js"></script>
 </head>
@@ -22,37 +23,55 @@
   </header>
   <noscript><p class="error-message">电机计算与绘图需要启用 JavaScript。</p></noscript>
   <main class="motor-workbench">
-    <section id="motor-parameters" class="parameter-strip" aria-label="电机标幺参数"></section>
-    <section class="plot-controls" aria-label="曲线与颜色图显隐">
-      <div class="curve-switches">
-        <label><input type="checkbox" id="show-mtpa" checked><span class="line-key mtpa"></span>MTPA</label>
-        <label><input type="checkbox" id="show-mtpv" checked><span class="line-key mtpv"></span>MTPV</label>
-        <div class="boundary-control"><label><input type="checkbox" id="show-torque" checked><span class="line-key torque"></span>恒转矩</label><span class="limit-entry torque-entry"><input id="torque-values" type="text" value="-3,-2.8,-2.6,-2.4,-2.2,-2,-1.8,-1.6,-1.4,-1.2,-1,-0.8,-0.6,-0.4,-0.2,0,0.2,0.4,0.6,0.8,1,1.2,1.4,1.6,1.8,2,2.2,2.4,2.6,2.8,3" spellcheck="false" autocomplete="off" aria-label="恒转矩标幺值列表" title="默认−3～3 pu、间隔0.2；多个值用逗号分隔，也可输入±0.5；最多32条"><select id="torque-preset" aria-label="恒转矩常用值" title="选择恒转矩常用值"><option value="" disabled selected></option><option value="-3,-2.8,-2.6,-2.4,-2.2,-2,-1.8,-1.6,-1.4,-1.2,-1,-0.8,-0.6,-0.4,-0.2,0,0.2,0.4,0.6,0.8,1,1.2,1.4,1.6,1.8,2,2.2,2.4,2.6,2.8,3">−3～3，间隔0.2</option><option value="-1,-0.5,0.5,1">±0.5、±1</option><option value="-1">−1</option><option value="-0.5">−0.5</option><option value="0.5">0.5</option><option value="1">1</option></select></span></div>
-        <label><input type="checkbox" id="show-pf" checked><span class="line-key pf"></span>功率因数</label>
-        <div class="boundary-control"><label><input type="checkbox" id="show-current" checked><span class="line-key current"></span>电流</label><span class="limit-entry"><input id="currentLimit" type="number" min="0" step="any" value="1" aria-label="电流边界标幺值" title="电流幅值 / pu"><select id="current-preset" aria-label="电流常用值" title="选择电流常用值"><option value="" disabled selected></option><option value="1">1</option><option value="1.15">1.15</option><option value="1.5">1.5</option><option value="2">2</option></select></span></div>
-        <div class="boundary-control"><label><input type="checkbox" id="show-voltage" checked><span class="line-key voltage"></span>电压</label><span class="limit-entry"><input id="voltageLimit" type="number" min="0" step="any" value="1" aria-label="电压边界标幺值" title="电压幅值 / pu"><select id="voltage-preset" aria-label="电压常用值" title="选择电压常用值"><option value="" disabled selected></option><option value="1">1</option><option value="1.15">1.15</option><option value="1.5">1.5</option><option value="2">2</option></select></span></div>
-      </div>
-      <div class="heat-controls"><label><input type="checkbox" id="show-heat">颜色图</label><select id="heat-quantity" aria-label="颜色图分布量"><option value="torque">转矩 T</option><option value="mechanical">机械功率</option><option value="active">有功 P</option><option value="reactive">无功 Q</option><option value="apparent">视在 S</option></select><select id="color-scale" aria-label="色标范围模式"><option value="fixed">固定色标</option><option value="auto">自动色标</option></select><input id="color-limit" type="number" min="0.1" max="10000" step="any" value="2" aria-label="色标上限pu"><span class="color-legend" id="color-legend" hidden><output id="color-min">−2</output><span id="color-ramp"></span><output id="color-max">2 pu</output></span></div>
-      <div class="view-tools"><button id="reset-view" class="tool-button" type="button" title="恢复初始视图" aria-label="恢复初始视图">⊙</button><button id="reset" class="tool-button" type="button" title="恢复默认参数" aria-label="恢复默认参数">↺</button></div>
+    <section class="plot-controls rotor-control-layout" aria-label="参数、显示与轨迹">
+      <section id="motor-parameters" class="parameter-strip" aria-label="电机标幺参数"><div id="motor-preset-control" class="motor-preset-control"><label for="motor-preset">电机预设</label><select id="motor-preset" title="载入标幺演示参数，仍可自由编辑"><option value="" disabled hidden>自定义</option></select></div></section>
+      <section id="motor-settings" class="motor-settings" aria-label="显示与色图设置">
+        <div class="settings-heading">显示与色图</div>
+        <div class="display-columns">
+        <div class="fixed-options">
+        <label class="optimum-key" title="固定参数下的最大转矩/电流轨迹"><input id="show-mtpa" type="checkbox" checked>MTPA<span class="line-key mtpa"></span></label>
+        <label class="optimum-key" title="含电阻与当前转速的最大转矩/电压轨迹"><input id="show-mtpv" type="checkbox" checked>MTPV<span class="line-key mtpv"></span></label>
+        <label><input id="show-feasible" type="checkbox" checked>约束域<span class="constraint-swatch"></span></label>
+        <label title="同时显示或隐藏电流与电压矢量"><input id="show-vectors" type="checkbox" checked>矢量点<span class="point-key current"></span><span class="point-key voltage"></span></label>
+        </div>
+      <div class="heat-controls"><div class="color-row"><label><input type="checkbox" id="show-heat">颜色图</label></div><div class="color-row"><select id="heat-coordinate" aria-label="色图坐标变量" title="电流：采样Id/Iq；电压：采样Ud/Uq并反算电流。"><option value="current">电流 Id/Iq</option><option value="voltage">电压 Ud/Uq</option></select></div><div class="color-row"><select id="heat-quantity" aria-label="颜色图分布量"></select></div><div class="heat-scale"><select id="color-scale" aria-label="色标范围模式"><option value="fixed">固定色标</option><option value="auto">自动色标</option></select><input id="color-limit" type="number" min="0.1" max="10000" step="any" value="2" aria-label="色标上限pu"></div><span class="color-legend" id="color-legend" hidden><output id="color-min">−2</output><span id="color-ramp"></span><output id="color-max">2 pu</output></span></div>
+        </div>
+      </section>
+      <section class="trajectory-controls" aria-label="轨迹控制表">
+        <table id="trajectory-table" class="trajectory-table">
+          <thead><tr><th scope="col">轨迹</th><th scope="col">常量值</th><th scope="col">电流实线</th><th scope="col">电压实线</th><th scope="col">参考虚线</th><th scope="col">锁定</th></tr></thead>
+          <tbody>
+            <tr data-kind="voltage"><th scope="row"><span class="line-key voltage"></span>恒电压</th><td><input id="voltageLimit" class="curve-value" type="number" min="0" step="any" value="1" aria-label="电压边界标幺值" title="电压幅值 / pu"></td><td><input id="show-voltage" type="checkbox" checked aria-label="恒电压电流轨迹"></td><td><input id="show-voltage-map" type="checkbox" aria-label="恒电压电压映射"></td><td><input id="show-voltage-group" type="checkbox" checked aria-label="电压参考组"></td><td><input id="lock-voltage" class="trajectory-lock" type="checkbox" aria-label="锁定电压幅值" title="再次点击解除；与其他行互斥"></td></tr>
+            <tr data-kind="current"><th scope="row"><span class="line-key current"></span>恒电流</th><td><input id="currentLimit" class="curve-value" type="number" min="0" step="any" value="1" aria-label="电流边界标幺值" title="电流幅值 / pu"></td><td><input id="show-current" type="checkbox" checked aria-label="恒电流电流轨迹"></td><td><input id="show-current-map" type="checkbox" aria-label="恒电流电压映射"></td><td aria-label="不提供电流参考组">—</td><td><input id="lock-current" class="trajectory-lock" type="checkbox" aria-label="锁定电流幅值" title="再次点击解除；与其他行互斥"></td></tr>
+            <tr data-kind="torque"><th scope="row"><span class="line-key torque"></span>恒转矩</th><td><input id="torque-target" class="curve-value" type="number" step="any" value="1" aria-label="当前转矩标幺值" title="转矩 / pu"></td><td><input id="show-torque" type="checkbox" checked aria-label="恒转矩电流轨迹"></td><td><input id="show-torque-map" type="checkbox" aria-label="恒转矩电压映射"></td><td><input id="show-torque-group" type="checkbox" checked aria-label="转矩参考组" title="−3～3 pu，间隔0.2"></td><td><input id="lock-torque" class="trajectory-lock" type="checkbox" aria-label="锁定转矩" title="再次点击解除；与其他行互斥"></td></tr>
+            <tr data-kind="phase"><th scope="row"><span class="line-key phase"></span>恒夹角 φ</th><td><input id="phase-target" class="curve-value" type="number" min="-180" max="180" step="any" value="0" aria-label="当前电压电流夹角度数" title="φ=θ电压−θ电流 / °"></td><td><input id="show-phase" type="checkbox" checked aria-label="恒夹角电流轨迹"></td><td><input id="show-phase-map" type="checkbox" aria-label="恒夹角电压映射"></td><td><input id="show-phase-group" type="checkbox" checked aria-label="夹角参考组" title="每30°一条"></td><td><input id="lock-pf" class="trajectory-lock" type="checkbox" aria-label="锁定功率因数" title="固定PF并保留当前φ分支；再次点击解除"></td></tr>
+          </tbody>
+        </table>
+        <div class="lock-summary"><output id="locked-value"></output><output id="lock-status" role="status"></output></div>
+      </section>
     </section>
     <p id="input-error" role="alert" class="error-message" hidden></p>
     <p id="plot-status" role="status" class="plot-status">正在绘图…</p>
     <section class="plot-stage" aria-label="DQ图与转速">
-      <div id="dq-plot" tabindex="0" role="figure" aria-label="DQ电流平面，单位pu；单击固定工作点，再次单击隐藏；支持滚轮缩放、框选和拖动平移"></div>
+      <div id="dq-plot" tabindex="0" role="figure" aria-label="转子DQ标幺平面，电流和电压矢量端点可拖动；支持滚轮缩放和空白拖动平移"></div>
       <aside class="speed-rail" aria-label="转速控制"><label for="speed-slider">转速</label><output id="speed-value">+1.00</output><span class="speed-unit">pu</span><div class="speed-track"><div class="speed-ticks" aria-hidden="true"><span>+2</span><span>0</span><span>−2</span></div><input type="range" id="speed-slider" min="-2" max="2" step="0.01" value="1" aria-label="转速竖向滑块"></div><input id="speedPU" type="number" min="-2" max="2" step="0.01" value="1" aria-label="转速标幺值"></aside>
     </section>
-    <div class="plot-caption"><span><i class="line-key torque"></i>T = 1 pu</span><span><i class="line-key pf"></i>PF = 1</span><span><i class="line-key minor"></i>其他等值线</span><output id="view-readout"></output></div>
     <p id="model-note" class="model-note" role="status" hidden></p>
     <footer class="analysis-footer">
-    <details><summary>参考电压 / pu</summary><div class="model-copy"><label>电压幅值 <input id="voltage-values" type="text" value="0,0.2,0.4,0.6,0.8,1,1.2,1.4,1.6,1.8,2" aria-label="参考电压标幺值列表" title="非负电压幅值，最多32条"></label><p>蓝色点线为不同电压幅值；蓝色粗实线为上方设置的电压边界。所有电压曲线采用当前转速，参考曲线不受边界限幅。零电压可能退化为点或直线。</p></div></details>
-    <details class="probe-details"><summary>工作点 / pu</summary><section class="probe-section" aria-labelledby="probe-heading"><div class="probe-heading"><h2 id="probe-heading">工作点 / pu</h2><label for="probe-d">i<sub>d</sub><input id="probe-d" type="number" step="0.01" value="-0.5"></label><label for="probe-q">i<sub>q</sub><input id="probe-q" type="number" step="0.01" value="0.7"></label><output id="probe-state">标记隐藏</output></div><div id="probe-readout" class="probe-readout" aria-live="polite"></div></section></details>
+    <details><summary>参考电压 / pu</summary><div class="model-copy"><label>电压幅值 <input id="voltage-values" type="text" value="0,0.2,0.4,0.6,0.8,1,1.2,1.4,1.6,1.8,2" aria-label="参考电压标幺值列表" title="非负电压幅值，最多32条"></label><p>所有电压曲线采用当前转速，参考曲线不受边界限幅。零电压可能退化为点或直线。</p></div></details>
+    <details class="probe-details"><summary>工作点 / pu</summary><section class="probe-section" aria-labelledby="probe-heading"><div class="probe-heading"><h2 id="probe-heading">工作点 / pu</h2><label for="probe-d">i<sub>d</sub><input id="probe-d" type="number" step="0.01" value="-0.5"></label><label for="probe-q">i<sub>q</sub><input id="probe-q" type="number" step="0.01" value="0.7"></label><output id="probe-state">稳态点</output></div><div id="probe-readout" class="probe-readout" aria-live="polite"></div></section></details>
     <details class="model-details"><summary>模型定义</summary><div class="model-copy">
       <p>参数、转速、电流、电压、转矩和功率均为标幺值。全程采用同一 DQ 稳态方程，无机型分支。T=1 是额定转矩基准线；电流与电压边界分别采用上方设置的幅值，不截断曲线或颜色图。参考电压默认0～2 pu、间隔0.2，电压边界粗实线独立保留。默认参数为演示示例，不对应具体电机型号。</p>
+      <p>约束域满足 |I|≤当前电流边界、|U|≤当前电压边界，两者取交集。它表示该稳态模型的电压/电流限制，不保证动态稳定；约束退化成线或点时不铺成二维面积。</p>
+      <p>电流与电压矢量各采用自己的标幺基准，共用d/q坐标方向；其图上长度不能直接比较物理单位。色图坐标选择电流时直接求值，选择电压时将每个Ud/Uq反算为Id/Iq，再计算T/P/Q/S及角度；逆解不唯一时留空。等值线和约束域仍是电流轨迹，电压色图应与电压端点对应，不将两种坐标混作同一物理点。φ与δ均使用首尾相接的循环色环，固定−180°～180°。</p>
+      <p>轨迹表最后一列为互斥锁定，四行最多一项启用；再次点击已锁定行可全部解除。锁定记录当前工作点的|I|、|U|、T或PF，不锁定坐标分量。恒夹角行的锁定仍采用PF并保留当前φ分支，与δ无关。无解、奇点或数值超限时保留最后有效状态；参数变更不兼容时拒绝该变更。</p>
+      <p>每行电流实线、电压映射实线及参考虚线独立显示。电压映射由同一条源电流轨迹逐点计算电压得到，采用同色较淡实线，默认关闭且不接管拖动。参考虚线仍在电流平面，不提供电流同心圆参考组；电压实线与电压矢量对应，电流实线与电流矢量对应。退化为单点的映射用点表示。</p>
       <p class="equation">v<sub>d</sub> = r i<sub>d</sub> − ω l<sub>q</sub> i<sub>q</sub> · v<sub>q</sub> = r i<sub>q</sub> + ω(l<sub>d</sub> i<sub>d</sub> + ψ)<br>T = [ψ + (l<sub>d</sub> − l<sub>q</sub>)i<sub>d</sub>]i<sub>q</sub><br>P<sub>mech</sub> = ωT · P = P<sub>mech</sub> + r|i|² · Q = v<sub>q</sub>i<sub>d</sub> − v<sub>d</sub>i<sub>q</sub> · S = |v||i| · PF = P/S</p>
-      <p>PF 保留 P 的符号，负值表示有功回馈；零电压或零电流时未定义。Q 采用上述 DQ 有向定义，反转时符号随坐标约定改变。机械功率为电磁转换功率，未计铁耗、机械损耗、饱和与热变化。</p>
+      <p>φ=θ电压−θ电流=atan2(Q,P)，以度数显示并取[−180°,180°)。背景每30°一条，180°与−180°为同一条；PF=cosφ仅是计算关系。零电压或零电流时φ未定义。φ是电压与电流的有向相位角，不是电压相对转子d轴的δ。Q采用上述DQ有向定义，反转时符号随坐标约定改变。机械功率为电磁转换功率，未计铁耗、机械损耗、饱和与热变化。</p>
       <p>MTPA 为固定电流幅值下的最大/最小转矩轨迹；MTPV 计入电阻与当前转速，为固定电压幅值下的最大/最小转矩轨迹。零电感或零速造成奇异约束时，不存在有限唯一 MTPV 的情况会单独提示。</p>
       <p class="reference-links"><a href="https://www.mathworks.com/help/mcb/gs/pmsm-constraint-curves-and-their-application.html" target="_blank" rel="noopener noreferrer">方程与约束曲线依据</a></p>
     </div></details>
+    <output id="view-readout"></output>
     </footer>
   </main>
 </body>

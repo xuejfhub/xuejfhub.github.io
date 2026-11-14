@@ -5,10 +5,27 @@
   'use strict';
   const DEFAULTS = Object.freeze({ resistance: .02, ld: .2, lq: .4, flux: .8,
     speedPU: 1, currentLimit: 1, voltageLimit: 1 });
+  const PRESETS = Object.freeze({
+    spm: Object.freeze({ label: '表贴式', parameters: Object.freeze({ resistance: .02, ld: .3, lq: .3, flux: .8 }) }),
+    ipm: Object.freeze({ label: '内嵌式', parameters: Object.freeze({ resistance: .02, ld: .2, lq: .4, flux: .8 }) }),
+    synrm: Object.freeze({ label: '同步磁阻', parameters: Object.freeze({ resistance: .02, ld: 1.2, lq: .4, flux: 0 }) })
+  });
   const LIMITS = Object.freeze({ resistance: [0, Infinity], ld: [0, Infinity], lq: [0, Infinity], flux: [0, Infinity],
     speedPU: [-2, 2], currentLimit: [0, Infinity], voltageLimit: [0, Infinity] });
   const DEFAULT_TORQUES = Object.freeze(Array.from({ length: 31 }, (_, index) => (index - 15) / 5));
   const DEFAULT_VOLTAGES = Object.freeze(Array.from({ length: 11 }, (_, index) => index / 5));
+  const DEFAULT_FACTORS = Object.freeze([-1, -.9, -.7, -.5, .5, .7, .9, .95, 1]);
+  const DEFAULT_PHASE_ANGLES = Object.freeze(Array.from({ length: 12 }, (_, index) => -180 + index * 30));
+
+  function normalizePhaseAngle(value) {
+    if (!Number.isFinite(value)) throw new RangeError('phase-angle');
+    return ((value % 360) + 540) % 360 - 180;
+  }
+
+  function phaseAngle(voltageD, voltageQ, currentD, currentQ) {
+    if (![voltageD, voltageQ, currentD, currentQ].every(Number.isFinite) || (voltageD === 0 && voltageQ === 0) || (currentD === 0 && currentQ === 0)) return null;
+    return normalizePhaseAngle((Math.atan2(voltageQ, voltageD) - Math.atan2(currentQ, currentD)) * 180 / Math.PI);
+  }
 
   function parseTorqueLevels(text) {
     if (typeof text !== 'string' || !text.trim()) throw new RangeError('torque-values');
@@ -63,7 +80,33 @@
     const copper = resistance * current * current;
     const pf = apparent > 1e-12 ? Math.max(-1, Math.min(1, active / apparent)) : null;
     return { direct, quadrature, vd, vq, torque, mechanical, active, reactive, apparent, copper,
-      current, voltage, pf, feasible: current <= model.input.currentLimit + 1e-10 && voltage <= model.input.voltageLimit + 1e-10 };
+      current, voltage, pf, phaseAngle: phaseAngle(vd, vq, direct, quadrature), feasible: current <= model.input.currentLimit + 1e-10 && voltage <= model.input.voltageLimit + 1e-10 };
+  }
+
+  function optimumAtQuadrature(model, kind, quadrature) {
+    if (!['mtpa', 'mtpv'].includes(kind) || !Number.isFinite(quadrature)) return null;
+    const { resistance, ld, lq, flux } = model.pu, speed = model.input.speedPU, difference = ld - lq;
+    if (flux === 0 && difference === 0) return null;
+    let shift = 0, effectiveFlux = flux, scaledQ = quadrature, direction = quadrature >= 0 ? 1 : -1;
+    if (kind === 'mtpv') {
+      const scale = Math.max(resistance, Math.abs(speed * ld), Math.abs(speed * lq));
+      if (!(scale > 0) || !Number.isFinite(scale)) return null;
+      const scaledR = resistance / scale, scaledD = speed * ld / scale, scaledLq = speed * lq / scale, emf = speed * flux / scale;
+      const directMetric = scaledR * scaledR + scaledD * scaledD, quadratureMetric = scaledR * scaledR + scaledLq * scaledLq;
+      const determinant = scaledR * scaledR + scaledD * scaledLq;
+      if (!(directMetric > 0 && determinant > 0)) return null;
+      shift = scaledD * emf / directMetric;
+      effectiveFlux = flux * determinant / directMetric;
+      scaledQ *= Math.sqrt(quadratureMetric / directMetric);
+      const centerQ = -scaledR * emf / determinant;
+      if (![shift, effectiveFlux, scaledQ, centerQ].every(Number.isFinite)) return null;
+      direction = quadrature >= centerQ ? 1 : -1;
+    }
+    const product = 2 * difference * scaledQ, denominator = effectiveFlux + Math.hypot(effectiveFlux, product);
+    const direct = -shift + (denominator === 0 ? 0 : product / denominator * scaledQ);
+    const state = evaluate(model, direct, quadrature);
+    if (!Object.values(state).every(value => typeof value !== 'number' || Number.isFinite(value))) return null;
+    return { ...state, direction, amplitude: kind === 'mtpa' ? state.current : state.voltage };
   }
 
   function mtpa(model, current, direction = 1) {
@@ -164,7 +207,7 @@
   }
 
   function powerFactorCurves(model, factor, extent, count = 800, bounds = null) {
-    if (!Number.isFinite(factor) || factor === 0 || Math.abs(factor) > 1) throw new RangeError('factor');
+    if (!Number.isFinite(factor) || Math.abs(factor) > 1) throw new RangeError('factor');
     const { resistance, ld, lq, flux } = model.pu;
     const speed = model.input.speedPU;
     if (speed === 0 || (flux === 0 && ld === lq)) return [];
@@ -176,6 +219,16 @@
       const point = evaluate(model, direct, quadrature);
       return point.pf !== null && Math.abs(point.pf - factor) < 1e-7 ? { direct, quadrature } : null;
     };
+    if (factor === 0) {
+      if (resistance === 0) return torqueCurves(model, 0, extent, count, bounds).map(branch => branch.map(point => point ? valid(point.direct, point.quadrature) : null));
+      const branches = [[], []];
+      for (let index = 0; index <= count; index++) {
+        const direct = minimumD + (maximumD - minimumD) * index / count;
+        const roots = quadraticRoots(resistance, speed * (flux + (ld - lq) * direct), resistance * direct * direct);
+        branches[0].push(valid(direct, roots[0])); branches[1].push(valid(direct, roots[1]));
+      }
+      return branches;
+    }
     return slopes.flatMap(slope => {
       const square = speed * lq - slope * resistance;
       const branches = [[], []];
@@ -214,6 +267,40 @@
       [{ direct: -extent, quadrature }, { direct: extent, quadrature }]);
   }
 
+  function phaseAngleCurves(model, angleDeg, extent, count = 800, bounds = null) {
+    const target = normalizePhaseAngle(angleDeg), angle = target * Math.PI / 180;
+    const cosine = Math.abs(Math.cos(angle)) < 1e-12 ? 0 : Math.cos(angle);
+    const sine = Math.abs(Math.sin(angle)) < 1e-12 ? 0 : Math.sin(angle);
+    const { resistance, ld, lq, flux } = model.pu, speed = model.input.speedPU;
+    if (speed === 0 || (flux === 0 && ld === lq)) return [];
+    const [minimumD, maximumD] = bounds?.x || [-extent, extent];
+    const [minimumQ, maximumQ] = bounds?.y || [-extent, extent];
+    const square = speed * lq * cosine - resistance * sine;
+    const directSquare = speed * ld * cosine - resistance * sine, directLinear = speed * flux * cosine;
+    const valid = (direct, quadrature) => {
+      if (!Number.isFinite(quadrature) || quadrature < minimumQ || quadrature > maximumQ) return null;
+      const point = evaluate(model, direct, quadrature);
+      return point.phaseAngle !== null && Math.abs(normalizePhaseAngle(point.phaseAngle - target)) < 1e-6 ? { direct, quadrature } : null;
+    };
+    const branches = [[], []];
+    for (let index = 0; index <= count; index++) {
+      const direct = minimumD + (maximumD - minimumD) * index / count;
+      const linear = -speed * (flux + (ld - lq) * direct) * sine;
+      const roots = quadraticRoots(square, linear, directSquare * direct * direct + directLinear * direct);
+      branches[0].push(valid(direct, roots[0])); branches[1].push(valid(direct, roots[1]));
+    }
+    if (Math.abs(square) < 1e-12 * Math.max(Math.abs(speed * lq * cosine), Math.abs(resistance * sine), 1e-30)) {
+      const candidates = directSquare === 0 && directLinear === 0 ? quadraticRoots(0, -speed * (ld - lq) * sine, -speed * flux * sine) : quadraticRoots(directSquare, directLinear, 0);
+      for (const direct of new Set(candidates)) {
+        const linear = -speed * (flux + (ld - lq) * direct) * sine;
+        const scale = Math.max(Math.abs(speed * flux * sine), Math.abs(speed * (ld - lq) * direct * sine), 1e-30);
+        if (direct >= minimumD && direct <= maximumD && Math.abs(linear) < 1e-12 * scale) branches.push(
+          Array.from({ length: count + 1 }, (_, index) => valid(direct, minimumQ + (maximumQ - minimumQ) * index / count)));
+      }
+    }
+    return branches;
+  }
+
   function grid(model, extent, resolution = 101, bounds = null) {
     const makeAxis = range => Array.from({ length: resolution }, (_, index) => range[0] + (range[1] - range[0]) * index / (resolution - 1));
     const directAxis = makeAxis(bounds?.x || [-extent, extent]);
@@ -245,6 +332,6 @@
     return { x: directAxis, y: quadratureAxis, fields, feasible };
   }
 
-  return { DEFAULTS, LIMITS, DEFAULT_TORQUES, DEFAULT_VOLTAGES, parseTorqueLevels, parseVoltageLevels, parameters, createModel, evaluate,
-    mtpa, currentAtVoltage, mtpv, locus, torqueCurves, powerFactorCurves, voltageCurves, grid };
+  return { DEFAULTS, PRESETS, LIMITS, DEFAULT_TORQUES, DEFAULT_VOLTAGES, DEFAULT_FACTORS, DEFAULT_PHASE_ANGLES, normalizePhaseAngle, phaseAngle, parseTorqueLevels, parseVoltageLevels, parameters, createModel, evaluate,
+    mtpa, currentAtVoltage, mtpv, optimumAtQuadrature, locus, torqueCurves, powerFactorCurves, phaseAngleCurves, voltageCurves, grid };
 });

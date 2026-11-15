@@ -2,8 +2,6 @@
 # 文档、测试、开发工具、离线包和本机配置保留在本地。
 /*
 !/.gitignore
-!/_config.yml
 !/index.html
-!/404.html
 !/pages/
 !/assets/

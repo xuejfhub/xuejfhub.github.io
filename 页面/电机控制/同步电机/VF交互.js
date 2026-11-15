@@ -3,7 +3,9 @@
   const VF = window.VoltageMotor, Rotor = window.SynchronousMotor, byId = id => document.getElementById(id), plot = byId('dq-plot');
   const constraintSampler = MotorPreview.createConstraintSampler({ frame: 'voltage', requiredVoltage: VF.requiredVoltage });
   const fieldSampler = VF.createFieldSampler();
-  const specifications = [['resistance', '电阻 Rs', .5, .005], ['ld', 'D轴电感 Ld', 2, .01], ['lq', 'Q轴电感 Lq', 2, .01], ['flux', '磁链 ψf', 2, .01]];
+  const torqueSampler = VF.createTorqueSampler();
+  const boundaryCache = new Map();
+  const specifications = [['resistance', '电阻 Rs', .5, .0005], ['ld', 'D轴电感 Ld', 2, .001], ['lq', 'Q轴电感 Lq', 2, .001], ['flux', '磁链 ψf', 2, .001]];
   const valueKeys = [...specifications.map(([key]) => key), 'voltageLimit', 'currentLimit', 'angleDeg', 'speedPU'];
   let view = null, preview = null, rendering = false, pending = false, timer = null, settleTimer = null, registered = false, scene = null, renderCount = 0;
   let pointLock = null, lockMessage = '';
@@ -19,7 +21,7 @@
     byId(key + '-slider').addEventListener('change', settle);
     byId(key).addEventListener('input', () => { byId(key + '-slider').value = byId(key).value; schedule(); });
   }
-  const presetInputs = new Set([...valueKeys, ...specifications.map(([key]) => key + '-slider'), 'speed-slider', 'angle-slider', 'torque-target', 'phase-target', 'voltage-values']);
+  const presetInputs = new Set([...valueKeys, ...specifications.map(([key]) => key + '-slider'), 'speed-slider', 'torque-target', 'phase-target', 'voltage-values']);
   document.querySelector('.motor-workbench').addEventListener('input', event => { lockMessage = ''; if (presetInputs.has(event.target.id)) byId('motor-preset').value = ''; }, true);
 
   function updateLockControls() {
@@ -36,7 +38,7 @@
   function restoreSceneInputs() {
     for (const key of valueKeys) byId(key).value = scene.model.input[key];
     for (const [key] of specifications) byId(key + '-slider').value = scene.model.input[key];
-    byId('speed-slider').value = scene.model.input.speedPU; byId('angle-slider').value = scene.model.input.angleDeg;
+    byId('speed-slider').value = scene.model.input.speedPU;
     byId('torque-target').value = scene.torqueTarget; byId('phase-target').value = scene.phaseTarget;
     byId('motor-preset').value = '';
   }
@@ -45,7 +47,7 @@
     const values = { ...VF.OPERATING_DEFAULTS, ...Rotor.PRESETS[preset].parameters };
     for (const key of valueKeys) byId(key).value = values[key];
     for (const [key] of specifications) byId(key + '-slider').value = values[key];
-    byId('speed-slider').value = values.speedPU; byId('angle-slider').value = values.angleDeg;
+    byId('speed-slider').value = values.speedPU;
     byId('torque-target').value = 1; byId('phase-target').value = 0;
     byId('voltage-values').value = Rotor.DEFAULT_VOLTAGES.join(',');
     byId('motor-preset').value = preset;
@@ -83,7 +85,7 @@
   function schedule() { if (timer === null) timer = setTimeout(() => { timer = null; render(); }, 16); }
   function settle() { if (preview?.dragging) return; clearTimeout(settleTimer); if (preview?.active) { preview.settle(); schedule(); } }
   function cancel() { if (preview?.active && plot._dragging) document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true })); settle(); }
-  function readScene() {
+  function readScene(previewOnly = false) {
     const model = VF.createOperatingModel(Object.fromEntries(valueKeys.map(key => [key, byId(key).valueAsNumber])));
     const levels = Rotor.DEFAULT_TORQUES, point = VF.atAngle(model);
     if (!VF.matchesLock(point, pointLock)) throw new RangeError('locked-state');
@@ -99,21 +101,41 @@
           torqueTarget !== 1 || phaseTarget !== 0 || byId('voltage-values').value !== Rotor.DEFAULT_VOLTAGES.join(',')) byId('motor-preset').value = '';
     }
     const selection = byId('heat-quantity').value;
-    const sampled = selection === 'none' ? null : fieldSampler.sample(model, view, 81);
+    const sampled = byId('show-heat').checked ? fieldSampler.sample(model, view, previewOnly ? 81 : 161) : null;
     const heat = sampled?.status === 'ok' ? selection : null;
     const maximum = byId('color-scale').value === 'auto' ? Math.max(1e-6, ...(sampled?.fields[selection]?.flat().filter(Number.isFinite).map(Math.abs) || [])) : byId('color-limit').valueAsNumber;
     if (heat && (!Number.isFinite(maximum) || maximum <= 0 || (byId('color-scale').value === 'fixed' && maximum < .1))) throw new RangeError('color-limit');
     const visible = Object.fromEntries(['mtpa', 'mtpv', 'voltage', 'current', 'torque', 'phase'].map(key => [key, byId('show-' + key).checked]));
+    visible.branchBoundary = byId('show-branch-boundary').checked;
     for (const kind of ['torque', 'voltage', 'phase']) visible[kind + 'Group'] = byId('show-' + kind + '-group').checked;
     const style = getComputedStyle(document.body), colors = Object.fromEntries(['mtpa', 'mtpv', 'torque', 'pf', 'boundary', 'voltage', 'voltage-level', 'feasible', 'text', 'muted', 'surface', 'line'].map(key => [key, style.getPropertyValue('--' + key).trim()]));
     const vectorVisibility = { current: byId('show-vectors').checked, voltage: byId('show-vectors').checked };
     const result = { model, levels, torqueTarget, phaseTarget, dark: document.documentElement.dataset.theme === 'dark', voltageLevels, visible, heat, sampled, maximum, colors, frame: 'voltage', point, vectorVisibility, showFeasible: byId('show-feasible').checked, constraintSampler,
-      forceCpu: true, rasterResolution: 41, grid: (bounds, resolution) => fieldSampler.sample(model, bounds, resolution) };
-    result.heatColor = value => MotorPreview.colorFor(value, result.maximum, heat === 'voltage');
-    plot.dataset.fieldInfo = JSON.stringify(sampled ? { ...sampled.summary, status: sampled.status, branch: 'origin', quantity: selection, ...fieldSampler.statistics } : { hidden: true });
+      forceCpu: true, asinhColor: byId('color-scale').value === 'auto', rasterResolution: 81, grid: (bounds, resolution) => fieldSampler.sample(model, bounds, resolution) };
+    result.heatColor = value => MotorPreview.colorFor(value, result.maximum, heat === 'voltage', result.asinhColor);
+    plot.dataset.fieldInfo = JSON.stringify(sampled ? { ...sampled.summary, status: sampled.status, branch: 'origin', quantity: selection, resolution: sampled.x.length, ...fieldSampler.statistics } : { hidden: true });
     result.geometryKey = [Object.entries(model.input).filter(([key]) => key !== 'angleDeg'), visible, levels, voltageLevels, torqueTarget, phaseTarget];
-    result.geometry = bounds => VF.geometry(result, bounds);
+    result.torqueCurves = (level, bounds) => torqueSampler.sample(model, level, bounds);
+    result.torqueAt = position => VF.originState(model, position.direct, position.quadrature)?.torque ?? null;
+    result.geometry = (bounds, fast = true) => {
+      const boundaryKey = JSON.stringify([model.pu, model.input.speedPU, bounds]);
+      const branchBoundary = () => {
+        if (!boundaryCache.has(boundaryKey)) {
+          boundaryCache.set(boundaryKey, VF.branchBoundary(model, bounds));
+          if (boundaryCache.size > 2) boundaryCache.delete(boundaryCache.keys().next().value);
+        }
+        return boundaryCache.get(boundaryKey);
+      };
+      const geometry = VF.geometry({ ...result, branchBoundary, torqueCurves: level => torqueSampler.sample(model, level, bounds, fast ? 480 : 960) }, bounds);
+      plot.dataset.torqueCache = JSON.stringify(torqueSampler.statistics);
+      return geometry;
+    };
     const capturedLock = pointLock && { ...pointLock };
+    result.axisState = angle => {
+      const candidate = VF.atAngle(model, angle);
+      return VF.matchesLock(candidate, capturedLock) ? candidate : null;
+    };
+    result.solveOptimum = (kind, position, direction = 1) => kind === 'mtpa' && !['current', 'torque'].includes(capturedLock?.kind) ? VF.mtpaAtCurrent(model, Math.hypot(position.direct, position.quadrature), direction) : null;
     result.solveCurrent = (position, reference) => VF.projectLockedCurrent(model, position, reference, capturedLock);
     result.solveVoltage = (voltage, reference) => {
       const candidate = VF.atVoltage(model, voltage, reference?.angleDeg ?? model.input.angleDeg);
@@ -149,7 +171,7 @@
   function previewInput() {
     if (!preview || rendering) { schedule(); return; }
     try {
-      const previousMaximum = scene.maximum; scene = readScene();
+      const previousMaximum = scene.maximum; scene = readScene(true);
       if (byId('color-scale').value === 'auto') scene.maximum = previousMaximum;
       updateColorLegend(scene);
       preview.setScene(scene); preview.request(view); clearTimeout(settleTimer); settleTimer = setTimeout(settle, 120);
@@ -165,7 +187,11 @@
     const previous = scene;
     try {
       let field;
-      if (linked) {
+      if (kind === 'mtpa' && linked) {
+        if (['current', 'torque'].includes(pointLock?.kind)) throw new RangeError('locked-state');
+        byId('currentLimit').value = value.current;
+        byId('torque-target').value = value.torque;
+      } else if (linked) {
         const currentDrag = kind === 'current-vector';
         const voltageLimit = pointLock?.kind === 'voltage' ? previous.model.input.voltageLimit : value.voltage;
         const proposed = VF.createOperatingModel({ ...previous.model.input, voltageLimit, ...(currentDrag ? {} : { currentLimit: value.current }), angleDeg: value.angleDeg });
@@ -174,21 +200,20 @@
         const values = currentDrag ? { voltageLimit: proposed.outputVoltage, angleDeg: proposed.input.angleDeg, 'torque-target': actual.torque } :
           { voltageLimit: proposed.outputVoltage, currentLimit: actual.current, angleDeg: proposed.input.angleDeg, 'torque-target': actual.torque, 'phase-target': actual.phaseAngle };
         for (const [key, number] of Object.entries(values)) byId(key).value = number;
-        byId('angle-slider').value = proposed.input.angleDeg;
       } else {
-        field = kind === 'torque' ? 'torque-target' : kind === 'phase' ? 'phase-target' : kind + 'Limit';
+        field = kind.startsWith('rotor-axis-') ? 'angleDeg' : kind === 'torque' ? 'torque-target' : kind === 'phase' ? 'phase-target' : kind + 'Limit';
         byId(field).value = kind === 'phase' ? Rotor.normalizePhaseAngle(value) : value;
       }
-      const next = readScene();
+      const next = readScene(true);
       if (next.model.reason || ((linked || kind === 'voltage') && !MotorPreview.interactivePoint(next.point))) throw new RangeError('invalid-drag');
       if (byId('color-scale').value === 'auto') next.maximum = previous.maximum;
       updateColorLegend(next);
       scene = next; preview.setScene(scene); preview.request(view); clearTimeout(settleTimer); settleTimer = null;
-      return linked ? { ...value, ...next.point } : byId(field).valueAsNumber;
+      return kind === 'mtpa' && linked ? value : linked ? { ...value, ...next.point } : byId(field).valueAsNumber;
     } catch {
       for (const [field, value] of fields) field.value = value;
       scene = previous;
-      try { readScene(); } catch { }
+      try { readScene(true); } catch { }
       preview.setScene(previous);
       return null;
     }
@@ -205,13 +230,14 @@
       direct.push(null); quadrature.push(null);
     }
     const appearance = MotorPreview.curveAppearance(line.kind, line.value, scene);
-    const result = { type: 'scatter', mode: line.dots ? 'markers' : 'lines', name: line.name, x: direct, y: quadrature, meta: { kind: line.kind, value: line.value, voltage: line.voltage }, line: { color: appearance.color, width: appearance.width, dash: appearance.dash.length ? 'dash' : 'solid' }, opacity: appearance.opacity, marker: { size: 7, color: appearance.color }, connectgaps: false, hoverinfo: 'skip' };
+    const result = { type: 'scatter', mode: line.dots ? 'markers' : 'lines', name: line.name, x: direct, y: quadrature, meta: { kind: line.kind, value: line.value, voltage: line.voltage, draggable: line.draggable }, line: { color: appearance.color, width: appearance.width, dash: appearance.dash.length ? 'dash' : 'solid' }, opacity: appearance.opacity, marker: { size: 7, color: appearance.color }, connectgaps: false, hoverinfo: 'skip' };
     return result;
   }
   function updateColorLegend(next) {
     byId('color-legend').hidden = !next.heat;
     byId('color-min').textContent = next.heat === 'voltage' ? '0' : format(-next.maximum);
-    byId('color-max').textContent = format(next.maximum) + ' pu';
+    byId('color-max').textContent = format(next.maximum) + ' pu' + (next.asinhColor ? ' · asinh' : '');
+    byId('color-legend').title = next.asinhColor ? '颜色按asinh(数值/1 pu)映射，端点标注原始数值' : '';
     byId('color-ramp').style.background = next.heat === 'voltage' ? 'linear-gradient(90deg,#f5f8f4,#8fccc3,#36a9ac,#146c94)' : '';
   }
   async function render() {
@@ -219,13 +245,14 @@
     rendering = true; pending = false;
     try {
       if (!view) view = fitView();
-      const next = readScene(), geometry = VF.geometry(next, view), data = [];
+      const next = readScene(), geometry = next.geometry(view, false), data = [];
       updateColorLegend(next);
       if (next.heat) {
         const positive = next.heat === 'voltage';
-        data.push({ type: 'heatmap', x: next.sampled.x, y: next.sampled.y, z: next.sampled.fields[next.heat],
-          zmin: positive ? 0 : -next.maximum, zmax: next.maximum, zsmooth: false, showscale: false, hoverongaps: false,
-          meta: { kind: 'heat', quantity: next.heat, representation: 'origin-connected-plane' },
+        const values = next.sampled.fields[next.heat], maximum = next.asinhColor ? Math.asinh(next.maximum) : next.maximum;
+        data.push({ type: 'heatmap', x: next.sampled.x, y: next.sampled.y, z: next.asinhColor ? values.map(row => row.map(value => value === null ? null : Math.asinh(value))) : values, customdata: values,
+          zmin: positive ? 0 : -maximum, zmax: maximum, zsmooth: 'best', connectgaps: false, showscale: false, hoverongaps: false,
+          meta: { kind: 'heat', quantity: next.heat, representation: 'origin-connected-plane', maximum: next.maximum, transform: next.asinhColor ? 'asinh' : 'linear' },
           colorscale: positive ? [[0, '#f5f8f4'], [.35, '#8fccc3'], [.7, '#36a9ac'], [1, '#146c94']] : [[0, '#3979ac'], [.25, '#a2c9dd'], [.5, '#f5f7ef'], [.75, '#efc59f'], [1, '#cb5a4f']], opacity: .72, hoverinfo: 'skip' });
       }
       if (next.showFeasible) {
@@ -274,8 +301,8 @@
     }
     updateLockControls(); schedule();
   });
-  for (const key of ['voltageLimit', 'currentLimit', 'torque-target', 'phase-target', 'voltage-values', 'color-limit']) byId(key).addEventListener('input', schedule);
-  for (const [slider, input] of [['speed-slider', 'speedPU'], ['angle-slider', 'angleDeg']]) {
+  for (const key of ['voltageLimit', 'currentLimit', 'torque-target', 'phase-target', 'voltage-values', 'color-limit', 'angleDeg']) byId(key).addEventListener('input', schedule);
+  for (const [slider, input] of [['speed-slider', 'speedPU']]) {
     byId(slider).addEventListener('input', event => { byId(input).value = event.target.value; previewInput(); });
     byId(slider).addEventListener('change', settle);
     byId(input).addEventListener('input', event => { byId(slider).value = event.target.value; schedule(); });

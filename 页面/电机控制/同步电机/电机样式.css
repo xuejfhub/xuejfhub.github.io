@@ -82,17 +82,17 @@ html { height: 100%; overflow: hidden; }
 .point-locks label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; white-space: nowrap; }
 .point-locks output { font-variant-numeric: tabular-nums; color: var(--muted); }
 .point-locks output:empty { display: none; }
-.rotor-control-layout { display: grid; grid-template-columns: minmax(220px, .95fr) minmax(390px, 1.4fr) minmax(304px, 1.1fr); grid-template-areas: 'parameters trajectories settings'; align-items: stretch; gap: 12px; padding: 0 0 8px; }
+.rotor-control-layout { display: grid; grid-template-columns: minmax(250px, 1.4fr) minmax(294px, .8fr) minmax(420px, 1.2fr); grid-template-areas: 'parameters trajectories settings'; align-items: stretch; gap: 12px; padding: 0 0 8px; }
 .motor-settings { grid-area: settings; display: flex; flex-direction: column; gap: 0; min-width: 0; }
 .settings-heading { height: 30px; display: flex; align-items: center; color: var(--muted); font-size: 11px; }
 .rotor-control-layout .parameter-strip { grid-area: parameters; display: flex; flex-direction: column; gap: 0; padding: 0; border: 0; }
-.rotor-control-layout .parameter-control { display: grid; grid-template-columns: 100px minmax(0, 1fr); align-items: center; gap: 6px; height: 36px; }
+.rotor-control-layout .parameter-control { display: grid; grid-template-columns: 90px minmax(0, 1fr); align-items: center; gap: 6px; height: 36px; }
 .rotor-control-layout .parameter-control > label { margin: 0; font-size: 11px; }
 .rotor-control-layout .motor-preset-control { height: 30px; flex-direction: row; align-items: center; gap: 8px; }
 .rotor-control-layout .motor-preset-control > label { width: 98px; flex-shrink: 0; font-size: 11px; }
 .rotor-control-layout .motor-preset-control > select { flex: 1; height: 26px; }
 .rotor-control-layout .slider-pair { grid-template-columns: minmax(0, 1fr) 62px; gap: 4px; }
-.display-columns { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 10px; }
+.display-columns { display: grid; grid-template-columns: 78px minmax(0, 1fr); gap: 6px; }
 .fixed-options { display: flex; flex-direction: column; align-items: stretch; gap: 0; }
 .fixed-options label { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; min-height: 36px; font-size: 11px; }
 .rotor-control-layout .heat-controls { display: flex; flex-direction: column; align-items: stretch; gap: 0; }
@@ -101,15 +101,20 @@ html { height: 100%; overflow: hidden; }
 .color-row select { width: 100%; }
 .heat-scale #color-scale { width: 78px; flex-shrink: 0; }
 .heat-scale #color-limit { width: 44px; flex-shrink: 0; }
-.rotor-control-layout .color-legend { min-width: 0; gap: 3px; white-space: nowrap; font-size: 9px; min-height: 18px; }
+.rotor-control-layout .color-legend { min-width: 0; gap: 3px; white-space: nowrap; font-size: 9px; min-height: 18px; margin-left: auto; }
+.color-legend output { overflow-wrap: anywhere; white-space: normal; }
 .rotor-control-layout #color-ramp { width: 42px; flex-shrink: 0; }
 .heat-scale:has(#color-scale:disabled) #color-limit { display: none; }
 .trajectory-controls { grid-area: trajectories; min-width: 0; }
 .trajectory-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 11px; }
 .trajectory-table th, .trajectory-table td { padding: 3px 2px; height: 36px; border-bottom: 1px solid var(--line); text-align: center; }
 .trajectory-table thead th { height: 30px; color: var(--muted); font-weight: 500; }
-.trajectory-table th:first-child { width: 94px; text-align: left; }
-.trajectory-table th:nth-child(2) { width: 68px; }
+.trajectory-table th:first-child { width: 80px; text-align: left; }
+.trajectory-table th:nth-child(2) { width: 62px; }
+.trajectory-table th:nth-child(3) { width: 36px; }
+.trajectory-table th:nth-child(4) { width: 58px; }
+.trajectory-options { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.trajectory-options label { display: inline-flex; align-items: center; gap: 3px; cursor: pointer; }
 .trajectory-table tbody th { font-weight: 500; white-space: nowrap; }
 .trajectory-table .line-key { width: 16px; float: right; margin: 7px 4px 0 6px; }
 .trajectory-table input[type="checkbox"] { vertical-align: middle; cursor: pointer; }

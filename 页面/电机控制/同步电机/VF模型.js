@@ -138,7 +138,7 @@
     if (!(length > 0) || !Number.isFinite(length)) return [];
     return [['d', cosine, -sine], ['q', sine, cosine]].map(([axis, direct, quadrature]) => {
       const endpoint = { direct: length * direct, quadrature: length * quadrature }, wing = length * .08;
-      return { kind: 'rotor-axis-' + axis, name: '转子 ' + axis + ' 轴', axisLabel: axis + 'ᵣ', labelPoint: endpoint, draggable: false,
+      return { kind: 'rotor-axis-' + axis, name: '转子 ' + axis + ' 轴', axisLabel: axis + 'ᵣ', labelPoint: endpoint, draggable: true, value: model.input.angleDeg,
         branches: [[{ direct: 0, quadrature: 0 }, endpoint], [
           { direct: endpoint.direct - wing * direct - wing * quadrature, quadrature: endpoint.quadrature - wing * quadrature + wing * direct }, endpoint,
           { direct: endpoint.direct - wing * direct + wing * quadrature, quadrature: endpoint.quadrature - wing * quadrature - wing * direct }]] };
@@ -376,21 +376,97 @@
     return candidates.filter(state => state.inverseSlope * slope > 0 && distance(state) < 45).sort((first, second) => distance(first) - distance(second))[0] || null;
   }
 
-  function torqueCurves(model, level, bounds, count = 480) {
-    const voltage = model.outputVoltage, resistance = model.pu.resistance, speed = model.input.speedPU;
-    if (voltage === 0 || speed === 0) return [];
-    if (resistance === 0) return [[{ direct: speed * level / voltage, quadrature: bounds.y[0] }, { direct: speed * level / voltage, quadrature: bounds.y[1] }]];
-    const branches = [[], []];
-    for (let index = 0; index <= count; index++) {
-      const quadrature = bounds.y[0] + (bounds.y[1] - bounds.y[0]) * index / count;
-      const constant = resistance * quadrature * quadrature + speed * level;
-      const discriminant = voltage * voltage - 4 * resistance * constant;
-      if (discriminant < 0) { branches[0].push(null); branches[1].push(null); continue; }
-      const total = voltage + Math.sqrt(discriminant);
-      branches[0].push({ direct: 2 * constant / total, quadrature });
-      branches[1].push({ direct: total / (2 * resistance), quadrature });
+  function torqueCurves(model, level, bounds, count = 960) {
+    if (!Number.isFinite(level)) throw new RangeError('torque');
+    if (model.input.speedPU === 0 || model.pu.flux === 0) return [];
+    const radius = Math.hypot(Math.max(...bounds.x.map(Math.abs)), Math.max(...bounds.y.map(Math.abs)));
+    const source = Rotor.torqueCurves(model, level, radius, count, { x: [-radius, radius], y: [-radius, radius] });
+    return source.map(branch => {
+      const samples = branch.length === 2 ? Array.from({ length: count + 1 }, (_, index) => ({
+        direct: branch[0].direct + (branch[1].direct - branch[0].direct) * index / count,
+        quadrature: branch[0].quadrature + (branch[1].quadrature - branch[0].quadrature) * index / count })) : branch;
+      return samples.map(point => {
+        if (!point) return null;
+        const state = Rotor.evaluate(model, point.direct, point.quadrature);
+        if (!(state.voltage > 1e-10)) return null;
+        const direct = state.active / state.voltage, quadrature = -state.reactive / state.voltage;
+        const connected = originState(model, direct, quadrature);
+        if (!connected || Math.abs(connected.voltage - state.voltage) > 1e-7 * Math.max(1, state.voltage) || Math.abs(connected.torque - level) > 1e-7 * Math.max(1, Math.abs(level))) return null;
+        return { direct, quadrature };
+      });
+    });
+  }
+
+  function mtpaAtCurrent(model, current, direction = 1) {
+    const optimum = Rotor.mtpa(model, current, direction);
+    if (!optimum || !(optimum.voltage > 1e-10) || !(current > 1e-10)) return null;
+    const state = rotatePoint(model, optimum.direct, optimum.quadrature, Math.atan2(optimum.vq, optimum.vd));
+    const connected = originState(model, state.direct, state.quadrature);
+    if (!connected || Math.abs(connected.voltage - state.voltage) > 1e-7 * Math.max(1, state.voltage)) return null;
+    return { ...state, direction, amplitude: state.current };
+  }
+
+  function branchBoundary(model, bounds, count = 1440) {
+    const { resistance, ld, lq, flux } = model.pu, speed = model.input.speedPU;
+    if (speed === 0 || flux === 0) return { fold: [], zero: [] };
+    const radius = Math.hypot(Math.max(...bounds.x.map(Math.abs)), Math.max(...bounds.y.map(Math.abs)));
+    const average = (ld + lq) / 2, difference = (ld - lq) / 2;
+    const accept = (direct, quadrature, angle, zero = false) => {
+      if (!Number.isFinite(direct) || !Number.isFinite(quadrature) || Math.hypot(direct, quadrature) > radius * 1.1) return null;
+      const cosine = Math.cos(angle), sine = Math.sin(angle);
+      const state = Rotor.evaluate(model, direct * cosine - quadrature * sine, direct * sine + quadrature * cosine);
+      const voltage = state.vd * cosine + state.vq * sine;
+      if (!zero && !(voltage > 1e-10)) return null;
+      const inside = originState(model, direct * (1 - 1e-5), quadrature * (1 - 1e-5));
+      if (!inside || Math.abs(Rotor.normalizePhaseAngle(inside.angleDeg - angle * 180 / Math.PI)) > 2) return null;
+      return { direct, quadrature, angleDeg: angle * 180 / Math.PI, voltage };
+    };
+    const fold = [];
+    if (difference === 0) {
+      const coefficientD = speed * average, coefficientQ = resistance, norm = Math.hypot(coefficientD, coefficientQ);
+      if (norm > 0) for (const angle of [0, Math.PI]) {
+        const offset = -speed * flux * Math.cos(angle) / norm;
+        fold.push(Array.from({ length: count + 1 }, (_, index) => {
+          const along = radius * (2 * index / count - 1);
+          return accept((offset * coefficientD - along * coefficientQ) / norm, (offset * coefficientQ + along * coefficientD) / norm, angle);
+        }));
+      }
+    } else {
+      fold.push(Array.from({ length: count + 1 }, (_, index) => {
+        const angle = 2 * Math.PI * index / count;
+        const coefficientD = speed * (average + difference * Math.cos(2 * angle));
+        const coefficientQ = resistance - speed * difference * Math.sin(2 * angle);
+        const constant = speed * flux * Math.cos(angle);
+        const derivativeD = -2 * speed * difference * Math.sin(2 * angle);
+        const derivativeQ = -2 * speed * difference * Math.cos(2 * angle);
+        const derivativeConstant = -speed * flux * Math.sin(angle);
+        const determinant = coefficientD * derivativeQ - coefficientQ * derivativeD;
+        if (Math.abs(determinant) <= 1e-12 * Math.max(Math.hypot(coefficientD, coefficientQ) * Math.hypot(derivativeD, derivativeQ), 1e-300)) return null;
+        return accept((coefficientQ * derivativeConstant - constant * derivativeQ) / determinant,
+          (constant * derivativeD - coefficientD * derivativeConstant) / determinant, angle);
+      }));
     }
-    return branches;
+    const zeroCurrent = Rotor.currentAtVoltage(model, 0, 0);
+    const zero = zeroCurrent ? [Array.from({ length: count + 1 }, (_, index) => {
+      const angle = 2 * Math.PI * index / count, cosine = Math.cos(angle), sine = Math.sin(angle);
+      return accept(zeroCurrent.direct * cosine + zeroCurrent.quadrature * sine,
+        -zeroCurrent.direct * sine + zeroCurrent.quadrature * cosine, angle, true);
+    })] : [];
+    return { fold, zero };
+  }
+
+  function createTorqueSampler() {
+    const caches = new Map(), statistics = { builds: 0, hits: 0 };
+    function sample(model, level, bounds, count = 960) {
+      const key = JSON.stringify([model.pu, model.input.speedPU, bounds, count]);
+      let curves = caches.get(key);
+      if (!curves) { curves = new Map(); caches.set(key, curves); if (caches.size > 2) caches.delete(caches.keys().next().value); }
+      if (curves.has(level)) { const value = curves.get(level); curves.delete(level); curves.set(level, value); statistics.hits++; return value; }
+      const value = torqueCurves(model, level, bounds, count); curves.set(level, value); statistics.builds++;
+      if (curves.size > 96) curves.delete(curves.keys().next().value);
+      return value;
+    }
+    return { sample, statistics };
   }
 
   function geometry(scene, bounds) {
@@ -407,8 +483,9 @@
       add('voltage', `当前电压 |U| = ${model.outputVoltage} pu`, [trajectory(model)], 1.8, .95, [], model.input.speedPU === 0, model.outputVoltage);
     }
     if (visible.current) add('current', '电流边界', [Array.from({ length: 361 }, (_, index) => ({ direct: model.input.currentLimit * Math.cos(index * Math.PI / 180), quadrature: model.input.currentLimit * Math.sin(index * Math.PI / 180) }))], 1.8, 1, [], model.input.currentLimit === 0, model.input.currentLimit);
-    if (visible.torqueGroup ?? visible.torque) for (const level of levels) add('torque-level', `T = ${level} pu`, torqueCurves(model, level, bounds), 1, .45, [7, 6], false, level);
-    if (visible.torque && Number.isFinite(scene.torqueTarget)) add('torque', `当前 T = ${scene.torqueTarget} pu`, torqueCurves(model, scene.torqueTarget, bounds), 1.8, .95, [], false, scene.torqueTarget);
+    const torque = level => scene.torqueCurves ? scene.torqueCurves(level, bounds) : torqueCurves(model, level, bounds);
+    if (visible.torqueGroup ?? visible.torque) for (const level of levels) add('torque-level', `T = ${level} pu`, torque(level), 1, .45, [7, 6], false, level);
+    if (visible.torque && Number.isFinite(scene.torqueTarget)) add('torque', `当前 T = ${scene.torqueTarget} pu`, torque(scene.torqueTarget), 1.8, .95, [], false, scene.torqueTarget);
     if ((visible.phaseGroup ?? visible.phase) && model.outputVoltage > 0) for (const angle of Rotor.DEFAULT_PHASE_ANGLES) add('phase-level', `φ = ${angle}°`, phaseAngleCurves(model, angle, bounds), 1, .45, [7, 6], false, angle);
     if (visible.phase && model.outputVoltage > 0 && Number.isFinite(scene.phaseTarget)) add('phase', `当前 φ = ${scene.phaseTarget}°`, phaseAngleCurves(model, scene.phaseTarget, bounds), 1.8, .95, [], false, scene.phaseTarget);
     for (const kind of ['mtpa', 'mtpv']) if (visible[kind]) {
@@ -418,9 +495,15 @@
         const state = Rotor.evaluate(model, point.direct, point.quadrature);
         return state.voltage > 1e-12 ? rotatePoint(model, point.direct, point.quadrature, Math.atan2(state.vq, state.vd)) : null;
       })), 2.8);
+      lines.at(-1).draggable = kind === 'mtpa';
+    }
+    if (visible.branchBoundary) {
+      const boundary = scene.branchBoundary ? scene.branchBoundary(bounds) : branchBoundary(model, bounds);
+      add('branch-fold', '电流边界 · 逆解折点', boundary.fold, 2.4);
+      add('branch-zero', '电流边界 · 零电压极限', boundary.zero, 2.4, 1, [6, 4]);
     }
     return { bounds, extent, lines };
   }
 
-  return { DEFAULTS, OPERATING_DEFAULTS, FIELD_QUANTITIES, originState, createFieldSampler, createModel, createOperatingModel, atVoltage, atAngle, voltageTrajectory, trajectory, projectCurrent, capturePointLock, matchesLock, projectLockedCurrent, rotorAxes, field, grid, requiredVoltage, voltageSolutions, currentState, inverseSlope, torqueCurves, phaseAngleCurves, geometry };
+  return { DEFAULTS, OPERATING_DEFAULTS, FIELD_QUANTITIES, originState, mtpaAtCurrent, branchBoundary, createFieldSampler, createTorqueSampler, createModel, createOperatingModel, atVoltage, atAngle, voltageTrajectory, trajectory, projectCurrent, capturePointLock, matchesLock, projectLockedCurrent, rotorAxes, field, grid, requiredVoltage, voltageSolutions, currentState, inverseSlope, torqueCurves, phaseAngleCurves, geometry };
 });

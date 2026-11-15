@@ -1,6 +1,10 @@
-.vf-page .rotor-control-layout { grid-template-columns: minmax(220px, .95fr) minmax(350px, 1.2fr) minmax(304px, 1.1fr); }
-.vf-page .angle-control { display: grid; grid-template-columns: auto minmax(0, 1fr) 56px; gap: 4px; align-items: center; font-size: 11px; min-width: 0; }
+.vf-page .branch-boundary-key { display: inline-flex; align-items: center; gap: 4px; min-height: 36px; white-space: nowrap; font-size: 11px; color: var(--text); }
+.vf-page .branch-boundary-key .line-key { border-color: #a85200; background: #a85200; }
+[data-theme="dark"] .vf-page .branch-boundary-key .line-key { border-color: #ffbb66; background: #ffbb66; }
+.vf-page .display-columns { grid-template-columns: 78px minmax(0, 1fr) 88px; }
+.vf-page .angle-control { display: grid; grid-template-columns: minmax(0, 1fr) 56px; gap: 4px; align-items: center; font-size: 11px; min-width: 0; }
 .vf-page .angle-control input[type="number"] { width: 56px; }
+.vf-page #heat-quantity { flex: 1; width: 0; min-width: 0; }
 .vf-summary { display: block; padding: 5px 0; color: var(--muted); font: 12px Consolas, "Microsoft YaHei", monospace; min-height: 27px; overflow-wrap: anywhere; }
 .vf-page .probe-readout { min-width: 0; grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .vf-reference { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; }

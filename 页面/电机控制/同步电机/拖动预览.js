@@ -7,7 +7,8 @@
   const SIGNED = [[0, [57, 121, 172]], [.25, [162, 201, 221]], [.5, [245, 247, 239]], [.75, [239, 197, 159]], [1, [203, 90, 79]]];
   const POSITIVE = [[0, [245, 248, 244]], [.35, [143, 204, 195]], [.7, [54, 169, 172]], [1, [20, 108, 148]]];
 
-  function colorFor(value, maximum, positive = false) {
+  function colorFor(value, maximum, positive = false, asinh = false) {
+    if (asinh) { value = Math.asinh(value); maximum = Math.asinh(maximum); }
     const fraction = Math.max(0, Math.min(1, positive ? value / maximum : (value / maximum + 1) / 2));
     const stops = positive ? POSITIVE : SIGNED;
     let upper = 1;
@@ -64,6 +65,7 @@
   }
 
   function curveAppearance(kind, value, scene = {}) {
+    if (kind.startsWith('branch-')) return { color: scene.dark ? '#ffbb66' : '#a85200', width: 2.4, opacity: 1, dash: kind === 'branch-zero' ? [6, 4] : [] };
     if (kind.startsWith('rotor-axis-')) return { color: scene.colors?.muted || '#657477', width: 1.5, opacity: .9, dash: [4, 3] };
     if (kind.startsWith('mapped-')) return { ...curveAppearance(kind.slice(7), value, scene), width: 2.2, opacity: .62, dash: [] };
     const family = kind.replace('-level', '');
@@ -114,6 +116,14 @@
   function curveDragValue(scene, hit, point, previousPoint) {
     if (![point.direct, point.quadrature].every(Number.isFinite)) return null;
     const model = scene.model;
+    if (hit.kind.startsWith('rotor-axis-')) {
+      const angleAt = position => Motor.normalizePhaseAngle((hit.kind === 'rotor-axis-q' ? 90 : 0) - Math.atan2(position.quadrature, position.direct) * 180 / Math.PI);
+      if (Math.hypot(point.direct, point.quadrature) <= (scene.minimumVector || 1e-10)) return null;
+      const angle = angleAt(point), state = scene.axisState?.(angle);
+      if (!interactivePoint(state, scene.minimumVector)) return null;
+      if (previousPoint && !connectedDirections(scene.axisState?.(angleAt(previousPoint)), state, scene.minimumVector)) return null;
+      return angle;
+    }
     if (hit.kind === 'phase') {
       const direction = position => scene.frame === 'voltage' ? { ...position, vd: model.outputVoltage, vq: 0, voltage: model.outputVoltage,
         current: Math.hypot(position.direct, position.quadrature), torque: 0, phaseAngle: Motor.phaseAngle(model.outputVoltage, 0, position.direct, position.quadrature) } : Motor.evaluate(model, position.direct, position.quadrature);
@@ -128,8 +138,7 @@
       return Number.isFinite(value) ? value : null;
     }
     if (hit.kind === 'torque') {
-      if (model.input.speedPU === 0) return null;
-      const value = (model.outputVoltage * point.direct - model.pu.resistance * (point.direct ** 2 + point.quadrature ** 2)) / model.input.speedPU;
+      const value = scene.torqueAt?.(point);
       return Number.isFinite(value) ? value : null;
     }
     if (!Number.isFinite(hit.angleDeg)) return null;
@@ -146,7 +155,8 @@
   }
 
   function optimumDragState(scene, hit, point) {
-    if (scene.frame === 'voltage' || !['mtpa', 'mtpv'].includes(hit.kind)) return null;
+    if (!['mtpa', 'mtpv'].includes(hit.kind)) return null;
+    if (scene.frame === 'voltage') return scene.solveOptimum?.(hit.kind, point, hit.direction) ?? null;
     return Motor.optimumAtQuadrature(scene.model, hit.kind, point.quadrature);
   }
 
@@ -178,7 +188,7 @@
           const current = Motor.currentAtVoltage(scene.model, Math.hypot(point.direct, point.quadrature), Math.atan2(point.quadrature, point.direct));
           state = current && Motor.evaluate(scene.model, current.direct, current.quadrature);
         }
-      } else state = optimumDragState(scene, { kind }, point);
+      } else state = optimumDragState(scene, { kind, direction: reference?.direction }, point);
       if (scene.constrainPoint) state = scene.constrainPoint(state, reference, kind);
       if (!interactivePoint(state, scene.minimumVector)) return null;
       if (reference) {
@@ -464,7 +474,8 @@ void main() {
       if (!pointer) return null;
       const key = JSON.stringify([scene.model.input, scene.visible, scene.torqueTarget, scene.phaseTarget, pointer.bounds]);
       if (!hitCache || hitCache.key !== key) hitCache = { key, lines: geometryFor(scene, pointer.bounds).lines };
-      const hit = pickCurve([...hitCache.lines, ...vectorGeometry(scene)], pointer.bounds, pointer.size, pointer.position, event.pointerType === 'touch' ? 12 : 8);
+      const axes = scene.axesGeometry ? scene.axesGeometry(pointer.bounds) : [];
+      const hit = pickCurve([...hitCache.lines, ...axes, ...vectorGeometry(scene)], pointer.bounds, pointer.size, pointer.position, event.pointerType === 'touch' ? 12 : 8);
       return hit ? { hit, ...pointer } : null;
     }
 
@@ -477,7 +488,7 @@ void main() {
       if (value === null || value === undefined || plot.dataset.stale === 'true') { clearHover(); return; }
       const format = number => String(Number(number.toPrecision(4)));
       const labels = { torque: 'T', voltage: '|U|', current: '|I|', phase: 'φ' };
-      dragReadout.textContent = kind === 'mtpa' ? `MTPA · |I|=${format(value.current)} pu · T=${format(value.torque)} pu` :
+      dragReadout.textContent = kind.startsWith('rotor-axis-') ? `δ=${format(value)}°` : kind === 'mtpa' ? `MTPA · |I|=${format(value.current)} pu · T=${format(value.torque)} pu` :
         kind === 'mtpv' ? `MTPV · |U|=${format(value.voltage)} pu · T=${format(value.torque)} pu` :
           kind.endsWith('-vector') ? `${kind === 'current-vector' ? 'I' : 'U'} · |I|=${format(value.current)} · |U|=${format(value.voltage)} · T=${format(value.torque)} pu` :
           `${labels[kind]}=${format(value)}${kind === 'phase' ? '°' : ' pu'}`;
@@ -614,7 +625,7 @@ void main() {
     }
 
     function gpuSuitable(view) {
-      if (scene.forceCpu) return false;
+      if (scene.forceCpu || scene.asinhColor) return false;
       if (!gpu || !program || gpuLost || gpu.isContextLost()) return false;
       const values = [...Object.values(scene.model.pu), ...view.x, ...view.y];
       if (!values.every(value => Number.isFinite(value) && Math.abs(value) <= 1e8) || scene.maximum > 1e30) return false;
@@ -674,7 +685,7 @@ void main() {
       const grid = scene.grid ? scene.grid(view, resolution) : Motor.grid(scene.model, 1, resolution, view), field = grid.fields[scene.heat];
       for (let row = 0; row < resolution; row++) for (let column = 0; column < resolution; column++) {
         const value = field[resolution - 1 - row][column];
-        const color = scene.heatColor ? scene.heatColor(value) : colorFor(value, scene.maximum, scene.heat === 'apparent');
+        const color = scene.heatColor ? scene.heatColor(value) : colorFor(value, scene.maximum, scene.heat === 'apparent', scene.asinhColor);
         const offset = (row * resolution + column) * 4;
         pixels.data[offset] = color?.[0] || 0; pixels.data[offset + 1] = color?.[1] || 0; pixels.data[offset + 2] = color?.[2] || 0; pixels.data[offset + 3] = Number.isFinite(value) ? 184 : 0;
       }

@@ -6,8 +6,8 @@
   const plot = byId('dq-plot');
   const constraintSampler = window.MotorPreview.createConstraintSampler();
   const specifications = [
-    ['resistance', '电阻 Rs', .5, .005], ['ld', 'D 轴电感 Ld', 2, .01],
-    ['lq', 'Q 轴电感 Lq', 2, .01], ['flux', '磁链 ψf', 2, .01]
+    ['resistance', '电阻 Rs', .5, .0005], ['ld', 'D 轴电感 Ld', 2, .001],
+    ['lq', 'Q 轴电感 Lq', 2, .001], ['flux', '磁链 ψf', 2, .001]
   ];
   const boundaryInputs = [['currentLimit', null, '电流边界'], ['voltageLimit', null, '电压边界']];
   const locks = {};
@@ -138,7 +138,7 @@
     const coordinate = byId('heat-coordinate').value, heat = byId('heat-quantity').value, definition = Analysis.quantities[heat];
     const capturedModel = model, capturedLocks = { ...locks };
     const mapped = mappingInputs();
-    return { heatCoordinate: coordinate, forceCpu: coordinate === 'voltage' || definition.cyclic,
+    return { heatCoordinate: coordinate, forceCpu: coordinate === 'voltage' || definition.cyclic, asinhColor: !definition.cyclic && byId('color-scale').value === 'auto',
       extraGeometry: bounds => Analysis.voltageGeometry(capturedModel, mapped.values, mapped.visible, bounds, 720),
       grid: (bounds, count) => Analysis.grid(capturedModel, bounds, count, coordinate),
       heatColor: definition.cyclic ? Analysis.angleColor : null,
@@ -234,13 +234,16 @@
       if (!fixed && !cyclic) maximum = Math.max(1e-6, ...values.flat().filter(value => value !== null).map(Math.abs));
       if (cyclic) maximum = 180;
       const positive = heat === 'apparent';
+      const asinh = !fixed && !cyclic, colorMaximum = asinh ? Math.asinh(maximum) : maximum;
+      const colors = asinh ? values.map(row => row.map(value => value === null ? null : Math.asinh(value))) : values;
       const coordinate = byId('heat-coordinate').value, prefix = coordinate === 'voltage' ? 'u' : 'i';
-      data.push({ type: 'heatmap', name: definition.label, meta: { kind: 'heat', quantity: heat, coordinate }, x: computed.grid.x, y: computed.grid.y, z: values,
-        zmin: positive ? 0 : -maximum, zmax: maximum, zsmooth: false, hoverongaps: false, opacity: .72,
+      data.push({ type: 'heatmap', name: definition.label, meta: { kind: 'heat', quantity: heat, coordinate, maximum, transform: asinh ? 'asinh' : 'linear' }, x: computed.grid.x, y: computed.grid.y, z: colors, customdata: values,
+        zmin: positive ? 0 : -colorMaximum, zmax: colorMaximum, zsmooth: false, hoverongaps: false, opacity: .72,
         colorscale: cyclic ? Analysis.cyclicScale.map(stop => [...stop]) : positive ? [[0, '#f5f8f4'], [.35, '#8fccc3'], [.7, '#36a9ac'], [1, '#146c94']] : [[0, '#3979ac'], [.25, '#a2c9dd'], [.5, '#f5f7ef'], [.75, '#efc59f'], [1, '#cb5a4f']],
-        showscale: false, hovertemplate: `${prefix}d %{x:.3f} pu<br>${prefix}q %{y:.3f} pu<br>${definition.label} %{z:.3f} ${definition.unit}<extra></extra>` });
+        showscale: false, hovertemplate: `${prefix}d %{x:.3f} pu<br>${prefix}q %{y:.3f} pu<br>${definition.label} %{customdata:.3f} ${definition.unit}<extra></extra>` });
       byId('color-min').textContent = positive ? '0' : format(-maximum, 2);
-      byId('color-max').textContent = format(maximum, 2) + ' ' + definition.unit;
+      byId('color-max').textContent = format(maximum, 2) + ' ' + definition.unit + (asinh ? ' · asinh' : '');
+      byId('color-legend').title = asinh ? '颜色按asinh(数值/1 pu)映射，端点标注原始数值' : '';
       byId('color-ramp').style.background = cyclic ? `linear-gradient(90deg,${Analysis.cyclicScale.map(stop => stop[1]).join(',')})` : positive ? 'linear-gradient(90deg,#f5f8f4,#8fccc3,#36a9ac,#146c94)' : '';
     }
     if (byId('show-feasible').checked) {
@@ -363,8 +366,9 @@
       let field;
       if (linked) {
         probe = { direct: value.direct, quadrature: value.quadrature };
-        const references = kind.endsWith('-vector') ? { 'torque-target': value.torque } :
-          { currentLimit: value.current, voltageLimit: value.voltage, 'torque-target': value.torque, 'phase-target': value.phaseAngle };
+        const references = { 'torque-target': value.torque };
+        if (kind === 'mtpa') references.currentLimit = value.current;
+        if (kind === 'mtpv') references.voltageLimit = value.voltage;
         for (const [key, number] of Object.entries(references)) byId(key).value = number;
       } else {
         field = kind === 'torque' ? 'torque-target' : kind === 'phase' ? 'phase-target' : kind + 'Limit';
@@ -434,7 +438,7 @@
       if (!preview) preview = window.MotorPreview.create(plot, { change: applyDrag, end: finishPan });
       const heatTrace = data.find(trace => trace.meta.kind === 'heat');
       lastScene = { model, levels: torqueLevels, torqueTarget, phaseTarget, dark: document.documentElement.dataset.theme === 'dark', voltageLevels: [...voltageLevels], visible: visibleLayers(), heat: heatTrace?.meta.quantity || null,
-        maximum: heatTrace?.zmax || 1, colors, showFeasible: byId('show-feasible').checked, constraintSampler,
+        maximum: heatTrace?.meta.maximum || 1, colors, showFeasible: byId('show-feasible').checked, constraintSampler,
         point: Motor.evaluate(model, probe.direct, probe.quadrature), vectorVisibility: vectorVisibility(), ...analysisScene() };
       preview.setScene(lastScene);
       if (!preview.active) { view = { x: [...plot._fullLayout.xaxis.range], y: [...plot._fullLayout.yaxis.range] }; preview.hide(); }

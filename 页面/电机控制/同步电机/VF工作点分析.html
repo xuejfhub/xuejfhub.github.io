@@ -24,12 +24,12 @@
       <section id="motor-parameters" class="parameter-strip" aria-label="电机标幺参数"><div id="motor-preset-control" class="motor-preset-control"><label for="motor-preset">电机预设</label><select id="motor-preset" title="载入标幺演示参数，仍可自由编辑"><option value="" disabled hidden>自定义</option></select></div></section>
       <section class="trajectory-controls" aria-label="VF轨迹控制表">
         <table id="trajectory-table" class="trajectory-table">
-          <thead><tr><th scope="col">轨迹</th><th scope="col">常量值</th><th scope="col">电流实线</th><th scope="col">参考虚线</th><th scope="col">锁定</th></tr></thead>
+          <thead><tr><th scope="col">变量</th><th scope="col">值</th><th scope="col">锁定</th><th scope="col">轨迹</th><th scope="col">轨迹组</th></tr></thead>
           <tbody>
-            <tr><th scope="row">恒电压<span class="line-key voltage"></span></th><td><input id="voltageLimit" class="curve-value" type="number" min="0" step="any" value="0.8" aria-label="指定电压标幺值" title="直接指定输出电压 / pu"></td><td><input id="show-voltage" type="checkbox" checked aria-label="显示电压轨迹"></td><td><input id="show-voltage-group" type="checkbox" checked aria-label="电压参考组"></td><td><input id="lock-voltage" class="trajectory-lock" type="checkbox" aria-label="锁定电压幅值" title="再次点击解除；最多锁定一项"></td></tr>
-            <tr><th scope="row">恒电流<span class="line-key current"></span></th><td><input id="currentLimit" class="curve-value" type="number" min="0" step="any" value="1" aria-label="电流边界标幺值" title="电流边界 / pu"></td><td><input id="show-current" type="checkbox" checked aria-label="显示电流边界"></td><td aria-label="不提供电流参考组">—</td><td><input id="lock-current" class="trajectory-lock" type="checkbox" aria-label="锁定电流幅值" title="只固定电流幅值，允许电压变化"></td></tr>
-            <tr><th scope="row">恒转矩<span class="line-key torque"></span></th><td><input id="torque-target" class="curve-value" type="number" step="any" value="1" aria-label="当前转矩标幺值"></td><td><input id="show-torque" type="checkbox" checked aria-label="显示转矩参考线"></td><td><input id="show-torque-group" type="checkbox" checked aria-label="转矩参考组"></td><td><input id="lock-torque" class="trajectory-lock" type="checkbox" aria-label="锁定转矩" title="只固定转矩，允许电压变化"></td></tr>
-            <tr><th scope="row">恒夹角 φ<span class="line-key phase"></span></th><td><input id="phase-target" class="curve-value" type="number" min="-180" max="180" step="any" value="0" aria-label="当前电压电流夹角度数"></td><td><input id="show-phase" type="checkbox" checked aria-label="显示夹角参考线"></td><td><input id="show-phase-group" type="checkbox" checked aria-label="夹角参考组"></td><td><input id="lock-pf" class="trajectory-lock" type="checkbox" aria-label="锁定功率因数" title="只固定PF及当前φ分支，允许电压变化"></td></tr>
+            <tr><th scope="row">恒电压<span class="line-key voltage"></span></th><td><input id="voltageLimit" class="curve-value" type="number" min="0" step="any" value="0.8" aria-label="指定电压标幺值" title="直接指定输出电压 / pu"></td><td><input id="lock-voltage" class="trajectory-lock" type="checkbox" aria-label="锁定电压幅值" title="再次点击解除；最多锁定一项"></td><td><input id="show-voltage" type="checkbox" checked aria-label="显示电压轨迹"></td><td><input id="show-voltage-group" type="checkbox" checked aria-label="电压参考组"></td></tr>
+            <tr><th scope="row">恒电流<span class="line-key current"></span></th><td><input id="currentLimit" class="curve-value" type="number" min="0" step="any" value="1" aria-label="电流边界标幺值" title="电流边界 / pu"></td><td><input id="lock-current" class="trajectory-lock" type="checkbox" aria-label="锁定电流幅值" title="只固定电流幅值，允许电压变化"></td><td><input id="show-current" type="checkbox" checked aria-label="显示电流边界"></td><td aria-label="不提供电流参考组">—</td></tr>
+            <tr><th scope="row">恒转矩<span class="line-key torque"></span></th><td><input id="torque-target" class="curve-value" type="number" step="any" value="1" aria-label="当前转矩标幺值"></td><td><input id="lock-torque" class="trajectory-lock" type="checkbox" aria-label="锁定转矩" title="只固定转矩，允许电压变化"></td><td><input id="show-torque" type="checkbox" checked aria-label="显示转矩参考线"></td><td><input id="show-torque-group" type="checkbox" checked aria-label="转矩参考组"></td></tr>
+            <tr><th scope="row">恒夹角 φ<span class="line-key phase"></span></th><td><input id="phase-target" class="curve-value" type="number" min="-180" max="180" step="any" value="0" aria-label="当前电压电流夹角度数"></td><td><input id="lock-pf" class="trajectory-lock" type="checkbox" aria-label="锁定功率因数" title="只固定PF及当前φ分支，允许电压变化"></td><td><input id="show-phase" type="checkbox" checked aria-label="显示夹角参考线"></td><td><input id="show-phase-group" type="checkbox" checked aria-label="夹角参考组"></td></tr>
           </tbody>
         </table>
         <div class="lock-summary"><output id="locked-value"></output><output id="lock-status" role="status"></output></div>
@@ -44,12 +44,12 @@
             <label title="同时显示电流与电压矢量"><input id="show-vectors" type="checkbox" checked>矢量点<span class="point-key current"></span><span class="point-key voltage"></span></label>
           </div>
           <div class="heat-controls">
-            <div class="color-row"><select id="heat-quantity" aria-label="颜色图分布量" title="全平面采样：从零电流点连续延拓的稳态分支"><option value="none">无颜色图</option><option value="voltage">电压 U</option><option value="torque" selected>转矩 T</option><option value="active">有功 P</option><option value="reactive">无功 Q</option></select></div>
-            <div class="color-row"><select id="color-scale" aria-label="色标范围"><option value="fixed">固定色标</option><option value="auto">自动色标</option></select></div>
+            <div class="color-row"><label><input id="show-heat" type="checkbox" checked>颜色图</label><select id="heat-quantity" aria-label="颜色图分布量" title="全平面采样：从零电流点连续延拓的稳态分支"><option value="voltage">电压 U</option><option value="torque" selected>转矩 T</option><option value="active">有功 P</option><option value="reactive">无功 Q</option></select></div>
+            <div class="color-row heat-scale"><select id="color-scale" aria-label="色标范围"><option value="fixed">固定色标</option><option value="auto" selected>自动色标</option></select><span class="color-legend" id="color-legend"><output id="color-min">−2</output><span id="color-ramp"></span><output id="color-max">2 pu</output></span></div>
             <div class="color-row"><label for="color-limit">色标 / pu</label><input id="color-limit" type="number" min="0.1" step="any" value="2" aria-label="色标上限pu"></div>
-            <div class="color-row angle-control" aria-label="电压相角"><label for="angle-slider">δ / °</label><input id="angle-slider" type="range" min="-180" max="180" step="0.5" value="110" aria-label="电压相对转子d轴的角度"><input id="angleDeg" type="number" step="any" value="110" aria-label="电压相角度数"></div>
-            <span class="color-legend" id="color-legend"><output id="color-min">−2</output><span id="color-ramp"></span><output id="color-max">2 pu</output></span>
+            <div class="color-row angle-control" aria-label="电压相角"><label for="angleDeg">δ / °</label><input id="angleDeg" type="number" step="any" value="110" aria-label="电压相角度数"></div>
           </div>
+          <div class="boundary-options"><label class="branch-boundary-key" title="原点连续支的电流边界：实线为逆解折点，虚线为零电压极限；不是恒电流限值圆，也不是所有稳态解的绝对电流上限。"><input id="show-branch-boundary" type="checkbox" checked>电流边界<span class="line-key"></span></label></div>
         </div>
       </section>
     </section>
@@ -62,21 +62,22 @@
     <output id="operating-summary" class="vf-summary"></output>
     <footer class="analysis-footer">
       <details><summary>工作点 / pu</summary><div class="model-copy"><div id="probe-readout" class="probe-readout"></div><p id="operating-state"></p></div></details>
-      <details><summary>参考线</summary><div class="model-copy vf-reference"><span>恒转矩 −3～3 pu，间隔0.2</span><label>电压 / pu <input id="voltage-values" type="text" value="0,0.2,0.4,0.6,0.8,1,1.2,1.4,1.6,1.8,2" aria-label="参考电压标幺值列表" title="默认0～2 pu、间隔0.2；非负幅值，最多32条"></label><p>零电压没有电压方向，不绘制定向轨迹。颜色图取原点连续支，与当前电压给定独立；恒转矩参考线仍对应当前给定电压，仅与该电压轨迹相交时代表同一实际状态。</p></div></details>
+      <details><summary>参考线</summary><div class="model-copy vf-reference"><span>恒转矩 −3～3 pu，间隔0.2</span><label>电压 / pu <input id="voltage-values" type="text" value="0,0.2,0.4,0.6,0.8,1,1.2,1.4,1.6,1.8,2" aria-label="参考电压标幺值列表" title="默认0～2 pu、间隔0.2；非负幅值，最多32条"></label><p>零电压没有电压方向，不绘制定向轨迹。颜色图和恒转矩线采用同一原点连续支；恒转矩线上各点使用自身所需电压，不随当前电压给定改变。</p></div></details>
       <details><summary>模型定义</summary><div class="model-copy">
         <p>采用同步稳态、定子电压矢量定向坐标：U<sub>d,u</sub>=Uout，U<sub>q,u</sub>=0。I<sub>q,u</sub>一般不为0。电压与电流的有向夹角φ=θ电压−θ电流=atan2(Q,P)，不同于电压相对转子d轴的δ；φ以度数显示，PF=cosφ仅作为计算关系。非角度量采用标幺值。</p>
         <p>φ背景从−180°到150°每30°一条，180°与−180°重合不重复。在电压坐标中，φ线是方向为−φ的单向电流射线；零电压或零电流时夹角未定义。</p>
         <p>约束域要求电流不超过当前电流边界，并存在满足完整电机方程的正电压解，且该电压不超过当前输出电压。这里允许电压在上限以内变化；固定电压的状态仍只在对应轨迹上。多解时任一满足限制的分支均可计入，不能一般地把闭合曲线外侧都当作低压可达区，也不保证动态稳定。</p>
         <p>两个矢量采用各自的标幺基准，并统一显隐；电压端点为(Uout,0)，不是该画布位置的电流工作点。未锁定时电流点在有效域内自由拖动，沿原解分支反算电压和δ；电压给定、δ及转矩随实际状态更新，电流边界与φ参考值不变。只有勾选恒电压时才固定电压幅值。无解、折点或零方向奇点保留最后有效状态。</p>
-        <p>灰色箭头dᵣ、qᵣ表示转子正d/q方向。在电压定向坐标中，转子d轴方向角为−δ，q轴为90°−δ；方向随δ实时变化。电压定向或方程无定义时不绘制方向。</p>
+        <p>灰色箭头dᵣ、qᵣ表示转子正d/q方向。在电压定向坐标中，转子d轴方向角为−δ，q轴为90°−δ。拖动任一轴线可旋转转子方向并改变δ，另一轴和工作点同步更新；U/I/T/φ参考值及视窗不变。δ数值框保留精确输入，相角滑块已移除。原点方向不明、零电流或锁定不兼容时保留最后有效位置；电压定向或方程无定义时不绘制方向。</p>
         <p>表内锁定最多一项，再次点击可解除，捕获当前工作点的|U|、|I|、T或PF，不锁坐标分量或附加另一个隐藏约束。电流锁定沿圆、PF锁定沿当前有向射线、转矩锁定按完整逆解等值条件投影；电压可随其他锁定下的移动变化。保持原有效解分支，参数修改不兼容时退回上一状态，不跳到其他解。</p>
         <p class="equation">Uout = U设定（与频率独立）<br>δ = θ电压 − θ转子<br>转子电压 vd = Uout cosδ，vq = Uout sinδ<br>Id,u = id cosδ + iq sinδ，Iq,u = −id sinδ + iq cosδ</p>
         <p>本页直接指定电压，不使用压频比、低速补偿或VF限幅。电压轨迹表示当前电压和频率下的电流工作点集合，不是电压随频率或时间变化的曲线。默认电压0.8 pu；改变频率不自动改变该电压。</p>
         <p>电压参考族默认0.2～2 pu、间隔0.2。每条曲线保持自身电压幅值与当前频率，改变δ后先求解原转子dq稳态方程，再旋转电流；参考电压与当前给定独立。电流圆仍是约束边界，不是另一独立驱动源。选定等转矩线不意味着实际工作点已满足该负载。相角是分析参数，不代表能控制或测得实际转子相角；没有机械动态、启动、失步或稳定性判定。</p>
         <p class="equation">P = Uout Id,u · Q = −Uout Iq,u · S = Uout |I|<br>Pmech = P − Rs |I|² · T = Pmech / ω（ω≠0）</p>
         <p>全平面颜色图提供所需电压U、转矩T、有功P和无功Q。非零转速、非零磁链时，从零电流点U=|ωψf|、T=P=Q=0沿径向自适应小步延拓同一稳态分支；不逐点按电压大小跳支，不用当前电源电压给全平面赋值。各点采用自身电压计算P=U Id,u、Q=−U Iq,u及完整转子方程转矩。</p>
-        <p>颜色图不随当前电源给定、δ或电流上限变化。无解、零电压边界、折点或无法可靠延拓的区域留空，不跨接其他分支；这只表示当前径向延拓确认的区域，不宣称找全所有可绕行到达的连通域。零速或零磁链时缺少原点电压方向锚点，色图留空并提示。恒转矩参考线仍对应当前给定电压，约束域另行表示限值；全平面颜色不保证动态稳定。</p>
-        <p>恒定参数模型的转子dq MTPA由电感和磁链决定，不直接依赖转速；这里的电压坐标投影使用当前转速。MTPV按包含Rs与当前转速的电压方程求极值。初始取景包含当前边界上的优化参考点，不表示整条无界参考轨迹都在屏幕内，也不表示所有参考点满足电流上限。</p>
+        <p>颜色图不随当前电源给定、δ或电流上限变化。无解、零电压边界、折点或无法可靠延拓的区域留空，不跨接其他分支；这只表示当前径向延拓确认的区域，不宣称找全所有可绕行到达的连通域。零速或零磁链时缺少原点电压方向锚点，色图与同支恒转矩线留空。恒转矩线由完整转子方程逐点求电压并映射至电压坐标，约束域另行表示限值；全平面颜色不保证动态稳定。</p>
+        <p>电流边界表示从零电流连续延拓得到的分支边缘，不是设定电流上限的恒电流圆。橙色实线由电压横向残差F=0及∂F/∂δ=0求得，表示逆解折点；橙色虚线是U→0的坐标定向极限，不是有效零电压工作点。只保留内侧可径向连接原点的段，与颜色图显隐独立。边界随参数及转速变化，不随当前Uout、δ或电流限值变化；不是所有分支的可达域、绝对电流上限或动态稳定边界，数值延拓留白也不一定是物理无解。</p>
+        <p>恒定参数模型的转子dq MTPA由电感和磁链决定，不直接依赖转速；这里的电压坐标投影使用当前转速。拖动MTPA按鼠标电流幅值求同一正负分支上的真实切点，只更新电流圆和转矩参考线，电压给定、δ、夹角参考和原工作点不变；标记表示参考切点，不是电源工作点。锁定电流或转矩时不启用此拖动，无原点连续支时保留最后有效位置。MTPV仍只作参考，不启用拖动；它按包含Rs与当前转速的电压方程求极值。初始取景包含当前边界上的优化参考点，不表示整条无界参考轨迹都在屏幕内，也不表示所有参考点满足电流上限。</p>
         <p class="reference-links"><a href="同步电机分析.html">转子定向分析</a> · <a href="https://www.mathworks.com/help/mcb/ref/mtpacontrolreference.html" target="_blank" rel="noopener noreferrer">转子方程依据</a></p>
       </div></details>
     </footer>

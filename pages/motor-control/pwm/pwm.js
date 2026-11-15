@@ -1,4 +1,4 @@
-/* Browser-only UI. Numerical calculations live in PWM模型.js. */
+/* Browser-only UI. Numerical calculations live in pwm-model.js. */
 (() => {
   'use strict';
   const P = window.PWMModel, $ = id => document.getElementById(id);

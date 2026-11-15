@@ -1,5 +1,5 @@
 (function (root, factory) {
-  if (typeof module === 'object' && module.exports) module.exports = factory(require('./电机模型.js'));
+  if (typeof module === 'object' && module.exports) module.exports = factory(require('./motor-model.js'));
   else root.MotorPreview = factory(root.SynchronousMotor);
 })(typeof globalThis === 'object' ? globalThis : this, function (Motor) {
   'use strict';
@@ -497,7 +497,7 @@ void main() {
       if (!dragCursor.isConnected) plot.append(dragCursor);
       if (!dragReadout.isConnected) plot.append(dragReadout);
       const linked = ['mtpa', 'mtpv', 'current-vector', 'voltage-vector'].includes(kind), layout = plot._fullLayout;
-      const position = linked ? kind === 'voltage-vector' ? { direct: value.vd, quadrature: scene.frame === 'voltage' ? 0 : value.vq } : value : anchor;
+      const position = scene.frame === 'voltage' && kind === 'mtpa' ? null : linked ? kind === 'voltage-vector' ? { direct: value.vd, quadrature: scene.frame === 'voltage' ? 0 : value.vq } : value : anchor;
       const horizontal = Math.max(8, Math.min(plot.clientWidth - 8, position ? layout.xaxis._offset + layout.xaxis.d2p(position.direct) : event.clientX - bounds.left - plot.clientLeft));
       const vertical = Math.max(8, Math.min(plot.clientHeight - 8, position ? layout.yaxis._offset + layout.yaxis.d2p(position.quadrature) : event.clientY - bounds.top - plot.clientTop));
       dragCursor.style.left = horizontal + 'px'; dragCursor.style.top = vertical + 'px'; dragCursor.hidden = false;

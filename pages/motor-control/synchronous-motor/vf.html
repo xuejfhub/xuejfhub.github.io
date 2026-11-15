@@ -6,15 +6,15 @@
   <meta name="color-scheme" content="light dark">
   <meta name="description" content="同步电机定子电压定向稳态工作点，直接指定电压，Ud为输出电压、Uq为零。">
   <title>同步电机VF定子电压定向工作点分析</title>
-  <script src="../../../资源/公共/主题设置.js"></script>
-  <link rel="stylesheet" href="../../../资源/公共/网站样式.css">
-  <link rel="stylesheet" href="电机样式.css">
-  <link rel="stylesheet" href="VF样式.css">
-  <script defer src="第三方/绘图库.min.js"></script>
-  <script defer src="电机模型.js"></script>
-  <script defer src="VF模型.js"></script>
-  <script defer src="拖动预览.js"></script>
-  <script defer src="VF交互.js"></script>
+  <script src="../../../assets/shared/theme.js"></script>
+  <link rel="stylesheet" href="../../../assets/shared/site.css">
+  <link rel="stylesheet" href="motor.css">
+  <link rel="stylesheet" href="vf.css">
+  <script defer src="vendor/plotly.min.js"></script>
+  <script defer src="motor-model.js"></script>
+  <script defer src="vf-model.js"></script>
+  <script defer src="drag-preview.js"></script>
+  <script defer src="vf-interaction.js"></script>
 </head>
 <body class="motor-page vf-page">
   <header class="motor-header"><a class="back-link" href="../../../index.html#motor">← 电机控制</a><h1>同步电机VF工作点分析</h1><span class="header-caption">定子电压 dq · 全标幺</span><button id="theme-toggle" class="icon-button" type="button" title="切换深浅色主题" aria-label="切换深浅色主题">◐</button></header>
@@ -77,8 +77,8 @@
         <p>全平面颜色图提供所需电压U、转矩T、有功P和无功Q。非零转速、非零磁链时，从零电流点U=|ωψf|、T=P=Q=0沿径向自适应小步延拓同一稳态分支；不逐点按电压大小跳支，不用当前电源电压给全平面赋值。各点采用自身电压计算P=U Id,u、Q=−U Iq,u及完整转子方程转矩。</p>
         <p>颜色图不随当前电源给定、δ或电流上限变化。无解、零电压边界、折点或无法可靠延拓的区域留空，不跨接其他分支；这只表示当前径向延拓确认的区域，不宣称找全所有可绕行到达的连通域。零速或零磁链时缺少原点电压方向锚点，色图与同支恒转矩线留空。恒转矩线由完整转子方程逐点求电压并映射至电压坐标，约束域另行表示限值；全平面颜色不保证动态稳定。</p>
         <p>电流边界表示从零电流连续延拓得到的分支边缘，不是设定电流上限的恒电流圆。橙色实线由电压横向残差F=0及∂F/∂δ=0求得，表示逆解折点；橙色虚线是U→0的坐标定向极限，不是有效零电压工作点。只保留内侧可径向连接原点的段，与颜色图显隐独立。边界随参数及转速变化，不随当前Uout、δ或电流限值变化；不是所有分支的可达域、绝对电流上限或动态稳定边界，数值延拓留白也不一定是物理无解。</p>
-        <p>恒定参数模型的转子dq MTPA由电感和磁链决定，不直接依赖转速；这里的电压坐标投影使用当前转速。拖动MTPA按鼠标电流幅值求同一正负分支上的真实切点，只更新电流圆和转矩参考线，电压给定、δ、夹角参考和原工作点不变；标记表示参考切点，不是电源工作点。锁定电流或转矩时不启用此拖动，无原点连续支时保留最后有效位置。MTPV仍只作参考，不启用拖动；它按包含Rs与当前转速的电压方程求极值。初始取景包含当前边界上的优化参考点，不表示整条无界参考轨迹都在屏幕内，也不表示所有参考点满足电流上限。</p>
-        <p class="reference-links"><a href="同步电机分析.html">转子定向分析</a> · <a href="https://www.mathworks.com/help/mcb/ref/mtpacontrolreference.html" target="_blank" rel="noopener noreferrer">转子方程依据</a></p>
+        <p>恒定参数模型的转子dq MTPA由电感和磁链决定，不直接依赖转速；这里的电压坐标投影使用当前转速。拖动MTPA按鼠标电流幅值求同一正负分支上的真实切点，只更新电流圆和转矩参考线，电压给定、δ、夹角参考和原工作点不变；十字光标及浮层跟随真实鼠标，不吸附到计算出的参考切点，原工作点不会移到MTPA线上。锁定电流或转矩时不启用此拖动，无原点连续支时参考值保留最后有效状态，光标仍跟随鼠标。MTPV仍只作参考，不启用拖动；它按包含Rs与当前转速的电压方程求极值。初始取景包含当前边界上的优化参考点，不表示整条无界参考轨迹都在屏幕内，也不表示所有参考点满足电流上限。</p>
+        <p class="reference-links"><a href="rotor.html">转子定向分析</a> · <a href="https://www.mathworks.com/help/mcb/ref/mtpacontrolreference.html" target="_blank" rel="noopener noreferrer">转子方程依据</a></p>
       </div></details>
     </footer>
   </main>

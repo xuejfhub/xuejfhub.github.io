@@ -5,15 +5,20 @@
 <script>
 (() => {
   const routes = {
-    '页面/电机控制/PWM教学实验.html': '页面/电机控制/PWM实验/PWM教学实验.html',
-    '页面/电机控制/异步电机分析.html': '页面/电机控制/异步电机/异步电机分析.html',
-    'projects/tlspwm_graph.html': '页面/电机控制/PWM实验/PWM教学实验.html',
-    'projects/web/visualization/tlspwm_graph.html': '页面/电机控制/PWM实验/PWM教学实验.html',
-    '作品/PWM教学实验.html': '页面/电机控制/PWM实验/PWM教学实验.html',
-    '作品/网页/可视化/PWM教学实验.html': '页面/电机控制/PWM实验/PWM教学实验.html',
-    'projects/web/visualization/async_motor_steady_state.html': '页面/电机控制/异步电机/异步电机分析.html',
-    '作品/网页/可视化/异步电机稳态.html': '页面/电机控制/异步电机/异步电机分析.html'
-  };
+  "页面/电机控制/PWM教学实验.html": "pages/motor-control/pwm/index.html",
+  "页面/电机控制/异步电机分析.html": "pages/motor-control/induction-motor/index.html",
+  "projects/tlspwm_graph.html": "pages/motor-control/pwm/index.html",
+  "projects/web/visualization/tlspwm_graph.html": "pages/motor-control/pwm/index.html",
+  "作品/PWM教学实验.html": "pages/motor-control/pwm/index.html",
+  "作品/网页/可视化/PWM教学实验.html": "pages/motor-control/pwm/index.html",
+  "projects/web/visualization/async_motor_steady_state.html": "pages/motor-control/induction-motor/index.html",
+  "作品/网页/可视化/异步电机稳态.html": "pages/motor-control/induction-motor/index.html",
+  "页面/控制原理/PI控制器/控制器可视化.html": "pages/control-theory/pi-controller/index.html",
+  "页面/电机控制/PWM实验/PWM教学实验.html": "pages/motor-control/pwm/index.html",
+  "页面/电机控制/异步电机/异步电机分析.html": "pages/motor-control/induction-motor/index.html",
+  "页面/电机控制/同步电机/同步电机分析.html": "pages/motor-control/synchronous-motor/rotor.html",
+  "页面/电机控制/同步电机/VF工作点分析.html": "pages/motor-control/synchronous-motor/vf.html"
+};
   let pathname;
   try { pathname = decodeURIComponent(location.pathname); } catch { return; }
   for (const [oldPath, newPath] of Object.entries(routes)) {

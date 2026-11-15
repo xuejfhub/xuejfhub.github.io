@@ -1,5 +1,5 @@
 (function (root, factory) {
-  if (typeof module === 'object' && module.exports) module.exports = factory(require('./电机模型.js'));
+  if (typeof module === 'object' && module.exports) module.exports = factory(require('./motor-model.js'));
   else root.MotorAnalysis = factory(root.SynchronousMotor);
 })(typeof globalThis === 'object' ? globalThis : this, function (Motor) {
   'use strict';

@@ -1,6 +1,6 @@
 /* Deterministic seeding and finite-time trajectories; no normalized velocities. */
 (function (root, factory) {
-  if (typeof module === 'object' && module.exports) module.exports = factory(require('./控制器模型.js'));
+  if (typeof module === 'object' && module.exports) module.exports = factory(require('./controller-model.js'));
   else root.ControllerFlow = factory(root.ControllerModel);
 })(typeof globalThis === 'object' ? globalThis : this, function (M) {
   'use strict';

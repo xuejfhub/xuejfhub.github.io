@@ -82,7 +82,7 @@ html { height: 100%; overflow: hidden; }
 .point-locks label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; white-space: nowrap; }
 .point-locks output { font-variant-numeric: tabular-nums; color: var(--muted); }
 .point-locks output:empty { display: none; }
-.rotor-control-layout { display: grid; grid-template-columns: minmax(250px, 1.4fr) minmax(294px, .8fr) minmax(420px, 1.2fr); grid-template-areas: 'parameters trajectories settings'; align-items: stretch; gap: 12px; padding: 0 0 8px; }
+.rotor-control-layout { display: grid; grid-template-columns: minmax(222px, 1.4fr) minmax(344px, .8fr) minmax(414px, 1.2fr); grid-template-areas: 'parameters trajectories settings'; align-items: stretch; gap: 8px; padding: 0 0 8px; }
 .motor-settings { grid-area: settings; display: flex; flex-direction: column; gap: 0; min-width: 0; }
 .settings-heading { height: 30px; display: flex; align-items: center; color: var(--muted); font-size: 11px; }
 .rotor-control-layout .parameter-strip { grid-area: parameters; display: flex; flex-direction: column; gap: 0; padding: 0; border: 0; }
@@ -109,14 +109,16 @@ html { height: 100%; overflow: hidden; }
 .trajectory-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 11px; }
 .trajectory-table th, .trajectory-table td { padding: 3px 2px; height: 36px; border-bottom: 1px solid var(--line); text-align: center; }
 .trajectory-table thead th { height: 30px; color: var(--muted); font-weight: 500; }
-.trajectory-table th:first-child { width: 80px; text-align: left; }
-.trajectory-table th:nth-child(2) { width: 62px; }
-.trajectory-table th:nth-child(3) { width: 36px; }
-.trajectory-table th:nth-child(4) { width: 58px; }
+.trajectory-table th:first-child { width: 94px; text-align: left; }
+.trajectory-table th:nth-child(2) { width: auto; }
+.trajectory-table th:nth-child(3) { width: 32px; }
+.trajectory-table th:nth-child(4) { width: 54px; }
+.trajectory-table th:nth-child(5) { width: 42px; }
+.trajectory-table input.curve-value { width: 100%; font-variant-numeric: tabular-nums; }
 .trajectory-options { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .trajectory-options label { display: inline-flex; align-items: center; gap: 3px; cursor: pointer; }
 .trajectory-table tbody th { font-weight: 500; white-space: nowrap; }
-.trajectory-table .line-key { width: 16px; float: right; margin: 7px 4px 0 6px; }
+.trajectory-table .line-key { width: 32px; float: right; margin: 7px 2px 0 5px; }
 .trajectory-table input[type="checkbox"] { vertical-align: middle; cursor: pointer; }
 .trajectory-table tr[data-locked="true"] { background: var(--soft); }
 .trajectory-table tr[data-locked="true"] th { color: var(--accent); }

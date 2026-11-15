@@ -2,7 +2,6 @@
 .vf-page .branch-boundary-key .line-key { border-color: #a85200; background: #a85200; }
 [data-theme="dark"] .vf-page .branch-boundary-key .line-key { border-color: #ffbb66; background: #ffbb66; }
 .vf-page .display-columns { grid-template-columns: 78px minmax(0, 1fr) 88px; }
-.vf-page .trajectory-table th:nth-child(4) { width: 32px; }
 .vf-page .angle-control { display: grid; grid-template-columns: minmax(0, 1fr) 56px; gap: 4px; align-items: center; font-size: 11px; min-width: 0; }
 .vf-page .angle-control input[type="number"] { width: 56px; }
 .vf-page #heat-quantity { flex: 1; width: 0; min-width: 0; }

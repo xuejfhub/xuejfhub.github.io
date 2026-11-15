@@ -65,6 +65,32 @@
     return { input, pu: { resistance, ld, lq, flux } };
   }
 
+  function createBases({ voltageRms, power, frequency, polePairs }) {
+    if (![voltageRms, power, frequency].every(value => Number.isFinite(value) && value > 0) ||
+        !Number.isSafeInteger(polePairs) || polePairs <= 0) throw new RangeError('base-input');
+    const voltage = Math.sqrt(2 / 3) * voltageRms;
+    const currentRms = power / (Math.sqrt(3) * voltageRms);
+    const current = Math.SQRT2 * currentRms;
+    const electricalSpeed = 2 * Math.PI * frequency;
+    const mechanicalSpeed = electricalSpeed / polePairs;
+    const impedance = voltage / current;
+    const inductance = impedance / electricalSpeed;
+    const flux = voltage / electricalSpeed;
+    const torque = power / mechanicalSpeed;
+    const result = { voltage, currentRms, current, electricalSpeed, mechanicalSpeed, impedance, inductance, flux, torque, power };
+    if (!Object.values(result).every(value => Number.isFinite(value) && value > 0)) throw new RangeError('base-range');
+    return result;
+  }
+
+  function convertParameter(bases, key, value, direction) {
+    const scale = { resistance: bases.impedance, ld: bases.inductance, lq: bases.inductance, flux: bases.flux }[key];
+    if (!Number.isFinite(scale) || scale <= 0 || !Number.isFinite(value) || value < 0 ||
+        !['toPU', 'toSI'].includes(direction)) throw new RangeError('conversion-input');
+    const result = direction === 'toPU' ? value / scale : value * scale;
+    if (!Number.isFinite(result) || (value > 0 && result === 0)) throw new RangeError('conversion-range');
+    return result;
+  }
+
   function evaluate(model, direct, quadrature) {
     const { resistance, ld, lq, flux } = model.pu;
     const speed = model.input.speedPU;
@@ -332,6 +358,6 @@
     return { x: directAxis, y: quadratureAxis, fields, feasible };
   }
 
-  return { DEFAULTS, PRESETS, LIMITS, DEFAULT_TORQUES, DEFAULT_VOLTAGES, DEFAULT_FACTORS, DEFAULT_PHASE_ANGLES, normalizePhaseAngle, phaseAngle, parseTorqueLevels, parseVoltageLevels, parameters, createModel, evaluate,
+  return { createBases, convertParameter, DEFAULTS, PRESETS, LIMITS, DEFAULT_TORQUES, DEFAULT_VOLTAGES, DEFAULT_FACTORS, DEFAULT_PHASE_ANGLES, normalizePhaseAngle, phaseAngle, parseTorqueLevels, parseVoltageLevels, parameters, createModel, evaluate,
     mtpa, currentAtVoltage, mtpv, optimumAtQuadrature, locus, torqueCurves, powerFactorCurves, phaseAngleCurves, voltageCurves, grid };
 });

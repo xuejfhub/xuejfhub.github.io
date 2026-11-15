@@ -6,11 +6,57 @@
   const HEAT_KEYS = ['torque', 'mechanical', 'active', 'reactive', 'apparent'];
   const SIGNED = [[0, [57, 121, 172]], [.25, [162, 201, 221]], [.5, [245, 247, 239]], [.75, [239, 197, 159]], [1, [203, 90, 79]]];
   const POSITIVE = [[0, [245, 248, 244]], [.35, [143, 204, 195]], [.7, [54, 169, 172]], [1, [20, 108, 148]]];
+  const PALETTES = Object.freeze({
+    classic: { label: '红蓝', signed: SIGNED, positive: POSITIVE },
+    brownTeal: { label: '棕绿', signed: [[0, [140, 81, 10]], [.25, [223, 194, 125]], [.5, [245, 245, 245]], [.75, [128, 205, 193]], [1, [1, 102, 94]]], positive: [[0, [245, 245, 245]], [.5, [128, 205, 193]], [1, [1, 102, 94]]] },
+    purpleGreen: { label: '紫绿', signed: [[0, [118, 42, 131]], [.25, [194, 165, 207]], [.5, [247, 247, 247]], [.75, [166, 219, 160]], [1, [0, 112, 55]]], positive: [[0, [247, 247, 247]], [.5, [166, 219, 160]], [1, [0, 112, 55]]] },
+    blueGold: { label: '蓝金', signed: [[0, [33, 102, 172]], [.25, [146, 197, 222]], [.5, [247, 247, 247]], [.75, [254, 224, 144]], [1, [166, 116, 0]]], positive: [[0, [255, 251, 230]], [.5, [254, 224, 144]], [1, [166, 116, 0]]] }
+  });
 
-  function colorFor(value, maximum, positive = false, asinh = false) {
+  function paletteStops(name = 'classic', positive = false) {
+    const palette = PALETTES[name] || PALETTES.classic;
+    return positive ? palette.positive : palette.signed;
+  }
+
+  function colorScale(name = 'classic', positive = false) {
+    return paletteStops(name, positive).map(([position, channels]) => [position, `rgb(${channels.join(',')})`]);
+  }
+
+  function colorGradient(name = 'classic', positive = false) {
+    return `linear-gradient(90deg,${colorScale(name, positive).map(([position, color]) => `${color} ${position * 100}%`).join(',')})`;
+  }
+
+  function formatNumber(value) {
+    return Number.isFinite(value) ? String(Number(value.toPrecision(4))) : '未定义';
+  }
+
+  function createNumericInputs(container) {
+    const values = new WeakMap();
+    function read(field) {
+      const saved = values.get(field);
+      return saved && saved.text === field.value ? saved.value : field.valueAsNumber;
+    }
+    function write(field, value) {
+      value = Number(value);
+      field.value = Number.isFinite(value) ? formatNumber(value) : '';
+      values.set(field, { text: field.value, value });
+    }
+    container.addEventListener('input', event => values.delete(event.target), true);
+    container.addEventListener('change', event => {
+      const field = event.target;
+      if (field.type === 'number' && Number.isFinite(read(field))) write(field, read(field));
+    }, true);
+    return {
+      read, write,
+      capture: () => [...container.querySelectorAll('input,select')].map(field => [field, field.value, values.get(field)]),
+      restore: snapshot => { for (const [field, text, saved] of snapshot) { field.value = text; if (saved) values.set(field, saved); else values.delete(field); } }
+    };
+  }
+
+  function colorFor(value, maximum, positive = false, asinh = false, palette = 'classic') {
     if (asinh) { value = Math.asinh(value); maximum = Math.asinh(maximum); }
     const fraction = Math.max(0, Math.min(1, positive ? value / maximum : (value / maximum + 1) / 2));
-    const stops = positive ? POSITIVE : SIGNED;
+    const stops = paletteStops(palette, positive);
     let upper = 1;
     while (upper < stops.length - 1 && fraction > stops[upper][0]) upper++;
     const lower = stops[upper - 1], higher = stops[upper];
@@ -396,16 +442,12 @@ uniform float colorMaximum;
 uniform int quantity;
 uniform int referenceFrame;
 uniform float outputVoltage;
-vec3 palette(float fraction, bool positive) {
-  if (positive) {
-    if (fraction < .35) return mix(vec3(245.,248.,244.),vec3(143.,204.,195.),fraction/.35)/255.;
-    if (fraction < .7) return mix(vec3(143.,204.,195.),vec3(54.,169.,172.),(fraction-.35)/.35)/255.;
-    return mix(vec3(54.,169.,172.),vec3(20.,108.,148.),(fraction-.7)/.3)/255.;
-  }
-  if (fraction < .25) return mix(vec3(57.,121.,172.),vec3(162.,201.,221.),fraction*4.)/255.;
-  if (fraction < .5) return mix(vec3(162.,201.,221.),vec3(245.,247.,239.),(fraction-.25)*4.)/255.;
-  if (fraction < .75) return mix(vec3(245.,247.,239.),vec3(239.,197.,159.),(fraction-.5)*4.)/255.;
-  return mix(vec3(239.,197.,159.),vec3(203.,90.,79.),(fraction-.75)*4.)/255.;
+uniform vec4 colorStops[5];
+vec3 palette(float fraction) {
+  if (fraction <= colorStops[1].a) return mix(colorStops[0].rgb,colorStops[1].rgb,(fraction-colorStops[0].a)/max(1e-6,colorStops[1].a-colorStops[0].a));
+  if (fraction <= colorStops[2].a) return mix(colorStops[1].rgb,colorStops[2].rgb,(fraction-colorStops[1].a)/max(1e-6,colorStops[2].a-colorStops[1].a));
+  if (fraction <= colorStops[3].a) return mix(colorStops[2].rgb,colorStops[3].rgb,(fraction-colorStops[2].a)/max(1e-6,colorStops[3].a-colorStops[2].a));
+  return mix(colorStops[3].rgb,colorStops[4].rgb,(fraction-colorStops[3].a)/max(1e-6,colorStops[4].a-colorStops[3].a));
 }
 void main() {
   vec2 current = mix(minimumView, maximumView, uv);
@@ -427,7 +469,7 @@ void main() {
   }
   bool positive = quantity == 4;
   float fraction = clamp(positive ? value/colorMaximum : (value/colorMaximum+1.)*.5,0.,1.);
-  gl_FragColor = vec4(palette(fraction,positive),.72);
+  gl_FragColor = vec4(palette(fraction),.72);
 }`;
 
   function create(plot, callbacks = {}) {
@@ -619,6 +661,7 @@ void main() {
         gpu.bufferData(gpu.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gpu.STATIC_DRAW);
         const position = gpu.getAttribLocation(program, 'position'); gpu.enableVertexAttribArray(position); gpu.vertexAttribPointer(position, 2, gpu.FLOAT, false, 0, 0);
         uniforms = Object.fromEntries(['minimumView', 'maximumView', 'motor', 'speed', 'colorMaximum', 'quantity', 'referenceFrame', 'outputVoltage'].map(name => [name, gpu.getUniformLocation(program, name)]));
+        uniforms.colorStops = gpu.getUniformLocation(program, 'colorStops[0]');
         const info = gpu.getExtension('WEBGL_debug_renderer_info');
         stats.renderer = gpu.getParameter(info ? info.UNMASKED_RENDERER_WEBGL : gpu.RENDERER);
       } catch (error) { gpuLost = true; stats.fallback = error.message; }
@@ -655,7 +698,7 @@ void main() {
         let previous = null;
         for (const point of scene.heatPoints) {
           const current = { x: (point.direct - view.x[0]) / (view.x[1] - view.x[0]) * width,
-            y: (view.y[1] - point.quadrature) / (view.y[1] - view.y[0]) * height, color: colorFor(point.torque, scene.maximum) };
+            y: (view.y[1] - point.quadrature) / (view.y[1] - view.y[0]) * height, color: colorFor(point.torque, scene.maximum, false, scene.asinhColor, scene.palette) };
           if (previous && [previous.x, previous.y, current.x, current.y].every(Number.isFinite) &&
               !((previous.x < -4 && current.x < -4) || (previous.x > width + 4 && current.x > width + 4) ||
                 (previous.y < -4 && current.y < -4) || (previous.y > height + 4 && current.y > height + 4))) {
@@ -677,6 +720,11 @@ void main() {
         gpu.uniform4f(uniforms.motor, resistance, ld, lq, flux); gpu.uniform1f(uniforms.speed, scene.model.input.speedPU);
         gpu.uniform1f(uniforms.colorMaximum, scene.maximum); gpu.uniform1i(uniforms.quantity, HEAT_KEYS.indexOf(scene.heat));
         gpu.uniform1i(uniforms.referenceFrame, scene.frame === 'voltage' ? 1 : 0); gpu.uniform1f(uniforms.outputVoltage, scene.model.outputVoltage || 0);
+        const stops = paletteStops(scene.palette, scene.heat === 'apparent');
+        gpu.uniform4fv(uniforms.colorStops, new Float32Array(Array.from({ length: 5 }, (_, index) => {
+          const [position, channels] = stops[Math.min(index, stops.length - 1)];
+          return [...channels.map(channel => channel / 255), position];
+        }).flat()));
         gpu.drawArrays(gpu.TRIANGLES, 0, 3); heatCanvas.style.display = 'block'; stats.backend = 'webgl'; stats.fallback = null; return;
       }
       if (gpu && program && !gpuLost && !gpu.isContextLost()) stats.fallback = 'numeric-precision';
@@ -685,7 +733,7 @@ void main() {
       const grid = scene.grid ? scene.grid(view, resolution) : Motor.grid(scene.model, 1, resolution, view), field = grid.fields[scene.heat];
       for (let row = 0; row < resolution; row++) for (let column = 0; column < resolution; column++) {
         const value = field[resolution - 1 - row][column];
-        const color = scene.heatColor ? scene.heatColor(value) : colorFor(value, scene.maximum, scene.heat === 'apparent', scene.asinhColor);
+        const color = scene.heatColor ? scene.heatColor(value) : colorFor(value, scene.maximum, scene.heat === 'apparent', scene.asinhColor, scene.palette);
         const offset = (row * resolution + column) * 4;
         pixels.data[offset] = color?.[0] || 0; pixels.data[offset + 1] = color?.[1] || 0; pixels.data[offset + 2] = color?.[2] || 0; pixels.data[offset + 3] = Number.isFinite(value) ? 184 : 0;
       }
@@ -825,5 +873,5 @@ void main() {
     };
   }
 
-  return { create, colorFor, curveColor, curveAppearance, pickCurve, curveDragValue, optimumDragState, interactivePoint, pointDragState, advanceDrag, vectorGeometry, vectorTraces, createConstraintSampler, constraintTrace, paddedBounds, covers, geometryFor, plotTopMargin, plotConfig, decorateViewTools };
+  return { PALETTES, colorScale, colorGradient, formatNumber, createNumericInputs, create, colorFor, curveColor, curveAppearance, pickCurve, curveDragValue, optimumDragState, interactivePoint, pointDragState, advanceDrag, vectorGeometry, vectorTraces, createConstraintSampler, constraintTrace, paddedBounds, covers, geometryFor, plotTopMargin, plotConfig, decorateViewTools };
 });
